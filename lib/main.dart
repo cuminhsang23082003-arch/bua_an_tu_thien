@@ -1,24 +1,34 @@
-import 'package:buaanyeuthuong/features/meal_events/viewmodels/create_meal_event_viewmodel.dart';
-import 'package:buaanyeuthuong/features/meal_events/viewmodels/edit_meal_event_viewmodel.dart';
-import 'package:buaanyeuthuong/features/restaurants/viewmodels/edit_restaurant_viewmodel.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'features/core/services/snackbar_service.dart';
-import 'features/dashboard/viewmodels/dashboard_viewmodel.dart';
-import 'features/dashboard/views/dashboard_router.dart';
-import 'features/authentication/repositories/auth_repository.dart';
-import 'features/authentication/viewmodels/auth_viewmodel.dart';
-import 'features/authentication/views/auth_screen.dart';
-import 'features/beneficiary/viewmodels/profile_viewmodel.dart';
-import 'features/donations/repositories/donation_repository.dart';
-import 'features/donations/viewmodels/donation_viewmodel.dart';
+import 'package:flutter_localizations/flutter_localizations.dart'; // [MỚI] Để hỗ trợ tiếng Việt
+
+// --- Services & Config ---
 import 'firebase_options.dart';
+import 'features/core/services/snackbar_service.dart';
+
+// --- Repositories ---
+import 'features/core/repositories/address_repository.dart'; // [MỚI] Quan trọng: Import AddressRepository
+import 'features/authentication/repositories/auth_repository.dart';
 import 'features/restaurants/repositories/restaurant_repository.dart';
 import 'features/meal_events/repositories/meal_event_repository.dart';
-import 'features/restaurants/viewmodels/create_restaurant_viewmodel.dart';
-import 'features/beneficiary/viewmodels/beneficiary_viewmodel.dart';
 import 'features/beneficiary/repositories/registration_repository.dart';
+import 'features/donations/repositories/donation_repository.dart';
+
+// --- ViewModels ---
+import 'features/dashboard/viewmodels/dashboard_viewmodel.dart';
+import 'features/authentication/viewmodels/auth_viewmodel.dart';
+import 'features/restaurants/viewmodels/create_restaurant_viewmodel.dart';
+import 'features/restaurants/viewmodels/edit_restaurant_viewmodel.dart';
+import 'features/meal_events/viewmodels/create_meal_event_viewmodel.dart';
+import 'features/meal_events/viewmodels/edit_meal_event_viewmodel.dart';
+import 'features/beneficiary/viewmodels/beneficiary_viewmodel.dart';
+import 'features/beneficiary/viewmodels/profile_viewmodel.dart';
+import 'features/donations/viewmodels/donation_viewmodel.dart';
+
+// --- Views ---
+import 'features/dashboard/views/dashboard_router.dart';
+import 'features/authentication/views/auth_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,13 +43,18 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        // --- 1. LEVEL THẤP: REPOSITORIES ---
         Provider<AuthRepository>(create: (_) => AuthRepository()),
+
+        // [QUAN TRỌNG] Phải cung cấp AddressRepository để tính năng chọn Tỉnh/Huyện hoạt động
+        Provider<AddressRepository>(create: (_) => AddressRepository()),
+
         Provider<RestaurantRepository>(create: (_) => RestaurantRepository()),
         Provider<MealEventRepository>(create: (_) => MealEventRepository()),
-        Provider<RegistrationRepository>(
-          create: (_) => RegistrationRepository(),
-        ),
+        Provider<RegistrationRepository>(create: (_) => RegistrationRepository()),
         Provider<DonationRepository>(create: (_) => DonationRepository()),
+
+        // --- 2. LEVEL CAO: VIEWMODELS ---
         Provider<DashboardViewModel>(
           create: (context) => DashboardViewModel(
             authRepository: context.read<AuthRepository>(),
@@ -49,19 +64,15 @@ class MyApp extends StatelessWidget {
           ),
         ),
 
-
         ChangeNotifierProvider<AuthViewModel>(
-          create: (context) =>
-              AuthViewModel(authRepository: context.read<AuthRepository>()),
+          create: (context) => AuthViewModel(authRepository: context.read<AuthRepository>()),
         ),
+
+        // Các ViewModel cần AddressRepository và RestaurantRepository
         ChangeNotifierProvider<CreateRestaurantViewModel>(
           create: (context) => CreateRestaurantViewModel(
             restaurantRepository: context.read<RestaurantRepository>(),
-          ),
-        ),
-        ChangeNotifierProvider<CreateMealEventViewModel>(
-          create: (context) => CreateMealEventViewModel(
-            mealEventRepository: context.read<MealEventRepository>(),
+            // Lưu ý: Nếu ViewModel này cần AddressRepo, hãy thêm: addressRepository: context.read<AddressRepository>(),
           ),
         ),
         ChangeNotifierProvider<EditRestaurantViewModel>(
@@ -70,6 +81,11 @@ class MyApp extends StatelessWidget {
           ),
         ),
 
+        ChangeNotifierProvider<CreateMealEventViewModel>(
+          create: (context) => CreateMealEventViewModel(
+            mealEventRepository: context.read<MealEventRepository>(),
+          ),
+        ),
         ChangeNotifierProvider<EditMealEventViewModel>(
           create: (context) => EditMealEventViewModel(
             mealEventRepository: context.read<MealEventRepository>(),
@@ -79,11 +95,12 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider<BeneficiaryViewModel>(
           create: (context) => BeneficiaryViewModel(
             registrationRepository: context.read<RegistrationRepository>(),
+            // [BỔ SUNG] Thường ViewModel này cần MealEventRepo để hiển thị thông tin bữa ăn trên vé
+            mealEventRepository: context.read<MealEventRepository>(),
           ),
         ),
         ChangeNotifierProvider<ProfileViewModel>(
-          create: (context) =>
-              ProfileViewModel(authRepository: context.read<AuthRepository>()),
+          create: (context) => ProfileViewModel(authRepository: context.read<AuthRepository>()),
         ),
         ChangeNotifierProvider<DonationViewModel>(
           create: (context) => DonationViewModel(
@@ -91,39 +108,58 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ],
-      // Consumer ở dưới sẽ tự động lấy đúng AuthViewModel từ context.
+
       child: Consumer<AuthViewModel>(
         builder: (context, authViewModel, _) {
           return MaterialApp(
             scaffoldMessengerKey: scaffoldMessengerKey,
             title: 'Bữa ăn yêu thương',
-            theme: ThemeData(primarySwatch: Colors.orange, useMaterial3: true),
-            home: _buildHome(authViewModel), // Tách ra cho gọn
+            debugShowCheckedModeBanner: false, // Tắt chữ Debug góc phải
+
+            theme: ThemeData(
+              primarySwatch: Colors.orange,
+              useMaterial3: true,
+              // Làm đẹp ô nhập liệu mặc định
+              inputDecorationTheme: InputDecorationTheme(
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                isDense: true,
+              ),
+            ),
+
+            // [MỚI] Cấu hình Tiếng Việt cho Lịch & Đồng hồ
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: const [
+              Locale('vi', 'VN'), // Ưu tiên Tiếng Việt
+              Locale('en', 'US'),
+            ],
+
+            home: _buildHome(authViewModel),
           );
         },
       ),
     );
   }
 
-  // REASON: Tách logic điều hướng ra một hàm riêng cho dễ đọc.
   Widget _buildHome(AuthViewModel authViewModel) {
     switch (authViewModel.status) {
       case AuthStatus.loading:
+      case AuthStatus.initial: // Thêm case initial để tránh màn hình trắng
         return const Scaffold(
           body: Center(
-            child: CircularProgressIndicator(color: Color(0xFFFF6B6B)),
+            child: CircularProgressIndicator(color: Colors.orange),
           ),
         );
       case AuthStatus.authenticated:
-        // Đảm bảo currentUser không null trước khi điều hướng
         if (authViewModel.currentUser != null) {
           return DashboardRouter(user: authViewModel.currentUser!);
         }
-        // Nếu currentUser null dù đã authenticated (trường hợp lỗi), quay về AuthScreen
         return const AuthScreen();
       case AuthStatus.unauthenticated:
       case AuthStatus.error:
-      case AuthStatus.initial:
       default:
         return const AuthScreen();
     }

@@ -1,4 +1,6 @@
 // lib/features/beneficiary/viewmodels/beneficiary_viewmodel.dart
+import 'package:buaanyeuthuong/features/meal_events/repositories/meal_event_repository.dart';
+
 import '../../authentication/models/user_model.dart';
 import '../../meal_events/models/meal_event_model.dart';
 import '../../restaurants/models/restaurant_model.dart';
@@ -7,8 +9,9 @@ import 'package:flutter/material.dart';
 
 class BeneficiaryViewModel extends ChangeNotifier {
   final RegistrationRepository _registrationRepository;
-  BeneficiaryViewModel({required RegistrationRepository registrationRepository})
-      : _registrationRepository = registrationRepository;
+  final MealEventRepository _mealEventRepository;
+  BeneficiaryViewModel({required RegistrationRepository registrationRepository, required MealEventRepository mealEventRepository})
+      : _registrationRepository = registrationRepository, _mealEventRepository = mealEventRepository;
 
   // Sử dụng một biến loading chung cho cả hai hành động
   bool _isLoading = false;
