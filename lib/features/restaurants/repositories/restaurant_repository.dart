@@ -132,7 +132,9 @@ class RestaurantRepository {
     return _firestore
         .collection('restaurants')
         .where('status', isEqualTo: RestaurantStatus.active.name)
-        .snapshots() // Dùng snapshots() thay vì get() để tạo Stream
+    .where('isVerified', isEqualTo: true)
+    .where('isBanned', isEqualTo: false)
+        .snapshots()
         .map((snapshot) {
           try {
             // Chuyển đổi mỗi document trong snapshot thành một RestaurantModel
@@ -150,6 +152,8 @@ class RestaurantRepository {
     return _firestore
         .collection('restaurants')
         .where('status', isEqualTo: RestaurantStatus.active.name)
+    .where('isVerified', isEqualTo: true)
+    .where('isBanned', isEqualTo: false)
         .where('suspendedMealsCount', isGreaterThan: 0)
         .orderBy('suspendedMealsCount', descending: true)
         .snapshots()

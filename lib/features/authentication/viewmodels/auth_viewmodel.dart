@@ -11,51 +11,59 @@ enum AuthStatus {
   loading,
   authenticated,
   unauthenticated,
-  error, // Giữ lại state này để xử lý các lỗi nghiêm trọng
+  error,
 }
 
 class AuthViewModel with ChangeNotifier {
   final AuthRepository _authRepository;
-
-  // [FIX 1] Lưu lại StreamSubscription để có thể hủy nó.
   StreamSubscription? _authSubscription;
 
-  AuthStatus _status = AuthStatus.initial; // Bắt đầu bằng initial rõ ràng hơn
+  AuthStatus _status = AuthStatus.initial;
   String _errorMessage = '';
   UserModel? _currentUser;
 
+  // [MỚI] Biến để xác định đang ở chế độ Đăng nhập hay Đăng ký
+  bool _isLoginMode = true;
+
   AuthStatus get status => _status;
-
   String get errorMessage => _errorMessage;
-
   UserModel? get currentUser => _currentUser;
-
   bool get isAuthenticated => _status == AuthStatus.authenticated;
+  bool get isLoginMode => _isLoginMode; // Getter cho UI
 
   AuthViewModel({required AuthRepository authRepository})
-    : _authRepository = authRepository {
+      : _authRepository = authRepository {
     _listenToAuthChanges();
   }
 
-  // [FIX 1] Hủy subscription khi ViewModel bị dispose để tránh memory leak.
   @override
   void dispose() {
     _authSubscription?.cancel();
     super.dispose();
   }
 
+  // [MỚI] Hàm chuyển đổi qua lại giữa Đăng nhập và Đăng ký
+  void toggleAuthMode() {
+    _isLoginMode = !_isLoginMode;
+    _errorMessage = ''; // Xóa lỗi cũ khi chuyển tab
+    notifyListeners();
+  }
+
+  // [MỚI] Hàm tiện ích: Chuyển SĐT thành Email giả định
+  // Trick: Firebase cần email, ta dùng sdt + đuôi domain của app
+  String _convertToEmail(String phone) {
+    final cleanPhone = phone.trim().replaceAll(' ', '');
+    return '$cleanPhone@buaanyeuthuong.vn';
+  }
+
   void _listenToAuthChanges() {
-    // Bắt đầu loading khi kiểm tra trạng thái lần đầu
     if (_status == AuthStatus.initial) {
       _updateStatus(AuthStatus.loading);
     }
 
-    _authSubscription = _authRepository.authStateChanges.listen((
-      User? firebaseUser,
-    ) async {
+    _authSubscription = _authRepository.authStateChanges.listen((User? firebaseUser) async {
       if (firebaseUser == null) {
         _currentUser = null;
-        // Listener là nguồn chân lý duy nhất, khi user null -> unauthenticated.
         _updateStatus(AuthStatus.unauthenticated);
         return;
       }
@@ -65,11 +73,11 @@ class AuthViewModel with ChangeNotifier {
           _currentUser = userModel;
           _updateStatus(AuthStatus.authenticated);
         } else {
-          // Lỗi nghiêm trọng: có user trong Auth nhưng không có trong Firestore.
+          // Trường hợp hiếm: Có Auth nhưng mất data Firestore -> Đăng xuất
           await _authRepository.signOut();
           _updateStatus(
             AuthStatus.error,
-            'Dữ liệu người dùng không đồng bộ. Vui lòng đăng nhập lại.',
+            'Dữ liệu người dùng không đồng bộ. Vui lòng thử lại.',
           );
         }
       } catch (e) {
@@ -79,71 +87,78 @@ class AuthViewModel with ChangeNotifier {
     });
   }
 
-  Future<void> signIn(String email, String password) async {
-    await _executeAuthAction(() async {
-      await _authRepository.signIn(email: email, password: password);
-      // Listener sẽ tự động xử lý việc chuyển sang authenticated.
-    });
-  }
-
-  // [REFINEMENT 2] Hàm signUp được làm gọn, tin tưởng vào listener.
-  Future<void> signUp(
-      String displayName,
-      String email,
-      String password,
-      UserRole role,
-      String phoneNumber,
-      ) async {
+  // [MỚI] Hàm xử lý chính cho cả Đăng nhập và Đăng ký
+  // View chỉ cần gọi hàm này khi nhấn nút "Tiếp tục" / "Xác nhận"
+  Future<void> submitAuth({
+    required String phoneNumber,
+    required String password,
+    String? name, // Chỉ cần khi đăng ký
+    UserRole role = UserRole.beneficiary, // Mặc định là người nhận
+  }) async {
     _updateStatus(AuthStatus.loading);
+
     try {
-      // 1. Kiểm tra SĐT
-      if (phoneNumber.isNotEmpty) {
-        final bool phoneExists = await _authRepository.isPhoneNumberExists(phoneNumber);
-        if (phoneExists) {
-          throw Exception("Số điện thoại này đã được sử dụng.");
+      final email = _convertToEmail(phoneNumber);
+
+      if (_isLoginMode) {
+        // --- LOGIC ĐĂNG NHẬP ---
+        await _authRepository.signIn(email: email, password: password);
+        // Listener sẽ tự chuyển state -> authenticated
+      } else {
+        // --- LOGIC ĐĂNG KÝ ---
+
+        // 1. Kiểm tra SĐT trong Firestore (Optional nhưng nên giữ để chắc chắn)
+        // Lưu ý: Firebase Auth check email trùng cũng tương đương check sdt trùng
+        // nhưng check Firestore giúp đảm bảo logic nghiệp vụ.
+        if (phoneNumber.isNotEmpty) {
+          final bool phoneExists = await _authRepository.isPhoneNumberExists(phoneNumber);
+          if (phoneExists) {
+            throw Exception("Số điện thoại này đã được sử dụng.");
+          }
         }
+
+        // 2. Tạo tài khoản Auth
+        final userCredential = await _authRepository.signUp(
+          email: email,
+          password: password,
+        );
+
+        // 3. Lưu dữ liệu vào Firestore
+        final newUser = UserModel.fromFirebaseUser(
+          userCredential.user!,
+          role,
+          displayName: name ?? 'Người dùng', // Tên mặc định nếu không nhập
+          phoneNumber: phoneNumber, // Lưu số điện thoại thực
+        );
+        await _authRepository.saveUserDataToFirestore(newUser);
       }
-
-      // 2. Tạo tài khoản (Firebase tự kiểm tra email)
-      final userCredential = await _authRepository.signUp(
-        email: email,
-        password: password,
-      );
-
-      // 3. Lưu dữ liệu vào Firestore
-      final newUser = UserModel.fromFirebaseUser(
-        userCredential.user!,
-        role,
-        displayName: displayName,
-        phoneNumber: phoneNumber.isEmpty ? null : phoneNumber,
-      );
-      await _authRepository.saveUserDataToFirestore(newUser);
-
-
     } on FirebaseAuthException catch (e) {
       _updateStatus(AuthStatus.error, _handleAuthError(e.code));
-      throw e;
     } catch (e) {
+      // Làm sạch thông báo lỗi (bỏ chữ Exception: )
       _updateStatus(AuthStatus.error, e.toString().replaceFirst('Exception: ', ''));
-      throw e;
     }
   }
 
   Future<void> signOut() async {
-    // Không cần _executeAuthAction vì logic khá đơn giản
     try {
       await _authRepository.signOut();
-      // Listener sẽ tự động chuyển state về unauthenticated.
     } catch (e) {
-      // Có thể cập nhật lỗi nếu đăng xuất thất bại
       _errorMessage = 'Đăng xuất thất bại.';
       notifyListeners();
     }
   }
 
-  Future<void> resetPassword({required String email}) async {
+  // Reset mật khẩu (vẫn cần logic email, nhưng ở đây ta truyền email giả vào)
+  // Lưu ý: Tính năng này sẽ gửi email về cái địa chỉ giả (@buaanyeuthuong.vn)
+  // nên thực tế người dùng SĐT sẽ KHÔNG nhận được mail reset.
+  // Với đối tượng lao động, nên khuyên họ liên hệ admin hoặc tạo tài khoản mới nếu quên.
+  Future<void> resetPassword({required String phoneNumber}) async {
     try {
+      final email = _convertToEmail(phoneNumber);
       await _authRepository.resetPassword(email: email);
+      // Thông báo UI (thực tế email này không tồn tại nên họ không nhận được đâu)
+      // Đây là hạn chế của việc dùng trick SĐT -> Email giả.
     } on FirebaseAuthException catch (e) {
       _errorMessage = _handleAuthError(e.code);
       notifyListeners();
@@ -151,57 +166,35 @@ class AuthViewModel with ChangeNotifier {
     }
   }
 
-  Future<void> _executeAuthAction(Future<void> Function() action) async {
-    _updateStatus(AuthStatus.loading);
-    try {
-      await action();
-    } on FirebaseAuthException catch (e) {
-      // [REFINEMENT 3] Khi đăng nhập sai, trạng thái logic là unauthenticated với một thông báo lỗi.
-      _updateStatus(AuthStatus.error, _handleAuthError(e.code));
-    } catch (e) {
-      _updateStatus(AuthStatus.error, 'Đã có lỗi xảy ra. Vui lòng thử lại.');
-    }
-  }
-
+  // Hàm xử lý lỗi, đã Việt hóa cho phù hợp ngữ cảnh "Số điện thoại"
   String _handleAuthError(String errorCode) {
     switch (errorCode) {
       case 'email-already-in-use':
-        return 'Email này đã được sử dụng.';
+        return 'Số điện thoại này đã được đăng ký.';
       case 'wrong-password':
       case 'invalid-credential':
       case 'user-not-found':
-        return 'Email hoặc mật khẩu không chính xác.';
+      // Gộp chung lỗi để bảo mật và tránh bối rối
+        return 'Sai số điện thoại hoặc mật khẩu.';
       case 'invalid-email':
-        return 'Email không hợp lệ.';
+        return 'Số điện thoại không hợp lệ.';
+      case 'weak-password':
+        return 'Mật khẩu quá yếu (cần ít nhất 6 ký tự).';
       case 'user-disabled':
         return 'Tài khoản đã bị vô hiệu hóa.';
       default:
-        return 'Có lỗi xảy ra. Vui lòng thử lại sau.';
+        return 'Đã có lỗi xảy ra ($errorCode). Vui lòng thử lại.';
     }
   }
 
   void _updateStatus(AuthStatus status, [String message = '']) {
     _status = status;
-    // Khi cập nhật status thành công (không phải lỗi), hãy xóa thông báo lỗi cũ.
     if (status != AuthStatus.error && status != AuthStatus.unauthenticated) {
       _errorMessage = '';
     } else {
       _errorMessage = message;
     }
     notifyListeners();
-  }
-
-  Future<void> refreshUserData() async {
-    final firebaseUser = _authRepository.currentUser;
-    if (firebaseUser != null) {
-      try {
-        final userModel = await _authRepository.getUserData(firebaseUser.uid);
-        if (userModel != null) {
-          _currentUser = userModel;
-          notifyListeners();
-        }
-      } catch (e) {}
-    }
   }
 
   void clearError() {

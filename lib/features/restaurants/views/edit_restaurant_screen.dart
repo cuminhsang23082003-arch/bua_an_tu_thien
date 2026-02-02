@@ -142,7 +142,7 @@ class _EditRestaurantScreenState extends State<EditRestaurantScreen> {
 
       if (success && mounted) {
         // Quan trọng: Làm mới cả dữ liệu user và dữ liệu quán ăn
-        await context.read<AuthViewModel>().refreshUserData();
+        // await context.read<AuthViewModel>().refreshUserData();
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Cập nhật thành công!')),

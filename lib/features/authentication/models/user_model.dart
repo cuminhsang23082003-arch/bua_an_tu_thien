@@ -5,7 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 enum UserRole {
   beneficiary('Người nhận'),
-  volunteer('Tình nguyện viên'),
+  admin('Admin'),
   restaurantOwner('Chủ quán ăn');
 
   const UserRole(this.displayName);
@@ -25,6 +25,7 @@ class UserModel extends Equatable {
   final DateTime createdAt;
   final DateTime updatedAt;
   final bool isEmailVerified;
+  final bool isActive;
 
   const UserModel({
     required this.uid,
@@ -39,31 +40,36 @@ class UserModel extends Equatable {
     required this.createdAt,
     required this.updatedAt,
     this.isEmailVerified = false,
+    this.isActive = true,
   });
 
-  // [SỬA ĐỔI QUAN TRỌNG]
   factory UserModel.fromFirebaseUser(
       User user,
       UserRole role, {
         String? displayName,
-        String? phoneNumber, // Thêm tham số phoneNumber
+        String? phoneNumber,
       }) {
     return UserModel(
       uid: user.uid,
       email: user.email ?? '',
       displayName: displayName ?? user.displayName ?? '',
-      phoneNumber: phoneNumber, // Gán giá trị phoneNumber
+      phoneNumber: phoneNumber,
       role: role,
       photoURL: user.photoURL,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
       isEmailVerified: user.emailVerified,
+      isActive: true,
     );
   }
 
-  factory UserModel.fromFirestore(Map<String, dynamic> data, String uid) {
+  // [ĐÃ SỬA LẠI] Nhận vào DocumentSnapshot để khớp với AdminRepository
+  factory UserModel.fromFirestore(DocumentSnapshot doc) {
+    // Lấy data và ép kiểu an toàn
+    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+
     return UserModel(
-      uid: uid,
+      uid: doc.id, // Lấy ID trực tiếp từ DocumentSnapshot
       email: data['email'] ?? '',
       displayName: data['displayName'] ?? '',
       phoneNumber: data['phoneNumber'],
@@ -78,6 +84,7 @@ class UserModel extends Equatable {
       createdAt: (data['createdAt'] as Timestamp? ?? Timestamp.now()).toDate(),
       updatedAt: (data['updatedAt'] as Timestamp? ?? Timestamp.now()).toDate(),
       isEmailVerified: data['isEmailVerified'] ?? false,
+      isActive: data['isActive'] ?? true,
     );
   }
 
@@ -94,6 +101,7 @@ class UserModel extends Equatable {
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
       'isEmailVerified': isEmailVerified,
+      'isActive': isActive,
     };
   }
 
@@ -107,6 +115,7 @@ class UserModel extends Equatable {
     String? photoURL,
     DateTime? updatedAt,
     bool? isEmailVerified,
+    bool? isActive,
   }) {
     return UserModel(
       uid: uid,
@@ -121,12 +130,13 @@ class UserModel extends Equatable {
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
       isEmailVerified: isEmailVerified ?? this.isEmailVerified,
+      isActive: isActive ?? this.isActive,
     );
   }
 
   @override
   List<Object?> get props => [
     uid, email, displayName, phoneNumber, province, district, address,
-    role, photoURL, createdAt, updatedAt, isEmailVerified,
+    role, photoURL, createdAt, updatedAt, isEmailVerified, isActive,
   ];
 }

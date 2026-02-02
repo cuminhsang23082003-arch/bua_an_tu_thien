@@ -18,6 +18,9 @@ class RestaurantModel extends Equatable {
   final RestaurantStatus status;
   final Map<String, String> operatingHours;
   final String? imageUrl;
+  final bool isVerified;
+  final String? rejectedReason;
+  final bool isBanned;
   final DateTime createdAt;
 
   const RestaurantModel({
@@ -35,6 +38,9 @@ class RestaurantModel extends Equatable {
     this.operatingHours = const {},
     this.imageUrl,
     required this.createdAt,
+    this.isVerified = false,
+    this.isBanned = false,
+    this.rejectedReason,
   });
 
   factory RestaurantModel.fromFirestore(DocumentSnapshot doc) {
@@ -57,6 +63,9 @@ class RestaurantModel extends Equatable {
       operatingHours: Map<String, String>.from(data['operatingHours'] ?? {}),
       imageUrl: data['imageUrl'],
       createdAt: (data['createdAt'] as Timestamp? ?? Timestamp.now()).toDate(),
+      isVerified: data['isVerified'] ?? false,
+      isBanned: data['isBanned'] ?? false,
+      rejectedReason: data['rejectedReason'],
     );
   }
 
@@ -76,14 +85,34 @@ class RestaurantModel extends Equatable {
       'operatingHours': operatingHours,
       'imageUrl': imageUrl,
       'createdAt': Timestamp.fromDate(createdAt),
+      'isVerified': isVerified,
+      'isBanned': isBanned,
+      'rejectedReason': rejectedReason,
     };
   }
 
   // [SỬA LỖI] Thêm province và district vào props
   @override
-  List<Object?> get props => [id, ownerId, name, province, district, address, location, phoneNumber, suspendedMealsCount,description, status, imageUrl, createdAt];
+  List<Object?> get props => [
+    id,
+    ownerId,
+    name,
+    province,
+    district,
+    address,
+    location,
+    phoneNumber,
+    suspendedMealsCount,
+    description,
+    status,
+    operatingHours,
+    imageUrl,
+    isVerified,
+    isBanned,
+    rejectedReason,
+    createdAt,
+  ];
 
-  // [SỬA LỖI] Thêm province và district vào tham số của copyWith
   RestaurantModel copyWith({
     String? name,
     String? province,
@@ -96,6 +125,9 @@ class RestaurantModel extends Equatable {
     RestaurantStatus? status,
     Map<String, String>? operatingHours,
     String? imageUrl,
+    bool? isVerified,
+    bool? isBanned,
+    String? rejectedReason,
   }) {
     return RestaurantModel(
       id: id,
@@ -111,6 +143,9 @@ class RestaurantModel extends Equatable {
       status: status ?? this.status,
       operatingHours: operatingHours ?? this.operatingHours,
       imageUrl: imageUrl ?? this.imageUrl,
+      isVerified: isVerified ?? this.isVerified,
+      isBanned: isBanned ?? this.isBanned,
+      rejectedReason: rejectedReason ?? this.rejectedReason,
       createdAt: createdAt,
     );
   }

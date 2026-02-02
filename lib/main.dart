@@ -4,6 +4,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_localizations/flutter_localizations.dart'; // [MỚI] Để hỗ trợ tiếng Việt
 
 // --- Services & Config ---
+import 'features/admin/repositories/admin_repository.dart';
+import 'features/admin/views/admin_main_screen.dart';
+import 'features/authentication/models/user_model.dart';
 import 'firebase_options.dart';
 import 'features/core/services/snackbar_service.dart';
 
@@ -45,6 +48,7 @@ class MyApp extends StatelessWidget {
       providers: [
         // --- 1. LEVEL THẤP: REPOSITORIES ---
         Provider<AuthRepository>(create: (_) => AuthRepository()),
+        Provider<AdminRepository>(create: (_) => AdminRepository()),
 
         // [QUAN TRỌNG] Phải cung cấp AddressRepository để tính năng chọn Tỉnh/Huyện hoạt động
         Provider<AddressRepository>(create: (_) => AddressRepository()),
@@ -155,8 +159,30 @@ class MyApp extends StatelessWidget {
         );
       case AuthStatus.authenticated:
         if (authViewModel.currentUser != null) {
+          if (authViewModel.currentUser!.role == UserRole.admin) {
+            return const AdminScreen();
+          }
+          if (authViewModel.currentUser!.isActive == false) {
+            return Scaffold(
+              body: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.block, size: 60, color: Colors.red),
+                    const SizedBox(height: 16),
+                    const Text("Tài khoản của bạn đã bị khóa.", style: TextStyle(fontSize: 18)),
+                    TextButton(
+                        onPressed: () => authViewModel.signOut(),
+                        child: const Text("Đăng xuất")
+                    )
+                  ],
+                ),
+              ),
+            );
+          }
           return DashboardRouter(user: authViewModel.currentUser!);
         }
+
         return const AuthScreen();
       case AuthStatus.unauthenticated:
       case AuthStatus.error:

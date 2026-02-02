@@ -80,11 +80,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       );
 
       // 4. Cập nhật thành công
-      if (mounted) {
-        await context.read<AuthViewModel>().refreshUserData();
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cập nhật thành công!')));
-        Navigator.of(context).pop();
-      }
+      // if (mounted) {
+      //   await context.read<AuthViewModel>().refreshUserData();
+      //   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cập nhật thành công!')));
+      //   Navigator.of(context).pop();
+      // }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Cập nhật thất bại: ${e.toString()}")));

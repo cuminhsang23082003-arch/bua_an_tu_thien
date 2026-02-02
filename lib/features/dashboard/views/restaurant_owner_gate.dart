@@ -5,6 +5,7 @@ import 'package:buaanyeuthuong/features/restaurants/models/restaurant_model.dart
 import 'package:buaanyeuthuong/features/restaurants/repositories/restaurant_repository.dart';
 import 'package:buaanyeuthuong/features/restaurants/views/create_restaurant_screen.dart';
 import 'package:buaanyeuthuong/features/restaurants/views/manage_restaurant_screen.dart';
+import 'package:buaanyeuthuong/features/restaurants/views/waiting_approval_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -39,9 +40,28 @@ class RestaurantOwnerGate extends StatelessWidget {
           // [SỬA ĐỔI QUAN TRỌNG]
           // Truyền đối tượng user vào constructor của CreateRestaurantScreen
           return CreateRestaurantScreen(owner: user);
-        } else {
-          return ManageRestaurantScreen(restaurant: restaurant);
+        } if(restaurant.isBanned) {
+          return Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.block,size: 60, color: Colors.red),
+                  const SizedBox(height: 16),
+                  const Text("Quán ăn đã bị khóa hoạt động.", style: TextStyle(fontSize: 18)),
+                  TextButton(
+                      onPressed: ()=> context.read<AuthViewModel>().signOut(),
+                      child: const Text("Đăng xuất"),
+                  )
+                ],
+              ),
+            ),
+          );
         }
+        if(restaurant.isVerified == false){
+          return const WaitingApprovalScreen();
+        }
+        return ManageRestaurantScreen(restaurant: restaurant);
       },
     );
   }
