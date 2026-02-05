@@ -64,6 +64,7 @@ class CreateRestaurantViewModel extends ChangeNotifier {
         id: '',
         // Firestore sẽ tự tạo ID
         ownerId: owner.uid,
+        ownerName: owner.displayName,
         name: name,
         province: province,
         district: district,

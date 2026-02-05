@@ -7,6 +7,7 @@ enum RestaurantStatus { active, pending_approval, closed }
 class RestaurantModel extends Equatable {
   final String id;
   final String ownerId;
+  final String ownerName;
   final String name;
   final String province;
   final String district;
@@ -26,6 +27,7 @@ class RestaurantModel extends Equatable {
   const RestaurantModel({
     required this.id,
     required this.ownerId,
+    required this.ownerName,
     required this.name,
     required this.province,
     required this.district,
@@ -48,6 +50,7 @@ class RestaurantModel extends Equatable {
     return RestaurantModel(
       id: doc.id,
       ownerId: data['ownerId'] ?? '',
+      ownerName: data['ownerName'] ?? '',
       name: data['name'] ?? '',
       province: data['province'] ?? '',
       district: data['district'] ?? '',
@@ -73,7 +76,7 @@ class RestaurantModel extends Equatable {
     return {
       'ownerId': ownerId,
       'name': name,
-      // [SỬA LỖI] Sửa lỗi chính tả
+      'ownerName': ownerName,
       'province': province,
       'district': district,
       'address': address,
@@ -96,6 +99,7 @@ class RestaurantModel extends Equatable {
   List<Object?> get props => [
     id,
     ownerId,
+    ownerName,
     name,
     province,
     district,
@@ -116,6 +120,8 @@ class RestaurantModel extends Equatable {
   RestaurantModel copyWith({
     String? name,
     String? province,
+    String? ownerId,
+    String? ownerName,
     String? district,
     String? address,
     GeoPoint? location,
@@ -131,7 +137,8 @@ class RestaurantModel extends Equatable {
   }) {
     return RestaurantModel(
       id: id,
-      ownerId: ownerId,
+      ownerId: ownerId ?? this. ownerId,
+      ownerName: ownerName ?? this.ownerName,
       name: name ?? this.name,
       province: province ?? this.province,
       district: district ?? this.district,

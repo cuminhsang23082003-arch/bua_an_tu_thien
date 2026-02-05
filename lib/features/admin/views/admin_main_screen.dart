@@ -372,114 +372,119 @@ class _RestaurantManagementPageState extends State<_RestaurantManagementPage> {
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) => DraggableScrollableSheet(
         initialChildSize: 0.7, minChildSize: 0.5, maxChildSize: 0.95, expand: false,
-        builder: (_, controller) => SingleChildScrollView(
-          controller: controller,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Stack(
-                children: [
-                  Container(
-                    height: 200, width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade200,
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                      image: r.imageUrl != null ? DecorationImage(image: NetworkImage(r.imageUrl!), fit: BoxFit.cover) : null,
-                    ),
-                    child: r.imageUrl == null ? const Center(child: Icon(Icons.image_not_supported, size: 50, color: Colors.grey)) : null,
-                  ),
-                  Positioned(
-                    top: 10, right: 10,
-                    child: IconButton(
-                      icon: const CircleAvatar(backgroundColor: Colors.white, child: Icon(Icons.close, color: Colors.black)),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  )
-                ],
-              ),
-              Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        builder: (_, controller) => SafeArea(
+          bottom: true,
+          child: SingleChildScrollView(
+            controller: controller,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Stack(
                   children: [
-                    Row(
-                      children: [
-                        Expanded(child: Text(r.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold))),
-                        _buildStatusBadge(r),
-                      ],
+                    Container(
+                      height: 200, width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                        image: r.imageUrl != null ? DecorationImage(image: NetworkImage(r.imageUrl!), fit: BoxFit.cover) : null,
+                      ),
+                      child: r.imageUrl == null ? const Center(child: Icon(Icons.image_not_supported, size: 50, color: Colors.grey)) : null,
                     ),
-                    const SizedBox(height: 8),
-                    Row(children: [const Icon(Icons.phone, size: 16, color: Colors.grey), const SizedBox(width: 4), Text(r.phoneNumber, style: const TextStyle(fontSize: 16, color: Colors.grey))]),
-                    const Divider(height: 30),
-                    _buildDetailRow(Icons.location_on, 'Địa chỉ', '${r.address}, ${r.district}, ${r.province}'),
-                    const SizedBox(height: 16),
-                    _buildDetailRow(Icons.description, 'Mô tả', r.description),
-                    const SizedBox(height: 16),
-                    _buildDetailRow(Icons.access_time, 'Giờ hoạt động', _formatOperatingHours(r.operatingHours)),
-                    const SizedBox(height: 30),
-
-                    // [CÁC NÚT HÀNH ĐỘNG] - ĐƯỢC PHÂN TÁCH RÕ RÀNG
-
-                    // TRƯỜNG HỢP 1: CHỜ DUYỆT (Hiện nút Từ chối & Duyệt)
-                    if (!r.isVerified && !r.isBanned) ...[
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                _confirmReject(context, r, widget.repo);
-                              },
-                              icon: const Icon(Icons.close), label: const Text("TỪ CHỐI"),
-                              style: OutlinedButton.styleFrom(foregroundColor: Colors.red, padding: const EdgeInsets.symmetric(vertical: 12)),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                widget.repo.updateRestaurantStatus(r.id, isVerified: true);
-                                Navigator.pop(context);
-                              },
-                              icon: const Icon(Icons.check), label: const Text("DUYỆT NGAY"),
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
-                            ),
-                          ),
-                        ],
-                      )
-
-                      // TRƯỜNG HỢP 2: ĐÃ KHÓA (Hiện nút Mở khóa)
-                    ] else if (r.isBanned) ...[
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            widget.repo.updateRestaurantStatus(r.id, isBanned: false);
-                            Navigator.pop(context);
-                          },
-                          icon: const Icon(Icons.lock_open), label: const Text("MỞ KHÓA TÀI KHOẢN"),
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
-                        ),
-                      )
-
-                      // TRƯỜNG HỢP 3: ĐANG HOẠT ĐỘNG (Hiện nút Khóa)
-                    ] else ...[
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            widget.repo.updateRestaurantStatus(r.id, isBanned: true);
-                            Navigator.pop(context);
-                          },
-                          icon: const Icon(Icons.lock), label: const Text("KHÓA QUÁN ĂN"),
-                          style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red), padding: const EdgeInsets.symmetric(vertical: 12)),
-                        ),
-                      )
-                    ]
+                    Positioned(
+                      top: 10, right: 10,
+                      child: IconButton(
+                        icon: const CircleAvatar(backgroundColor: Colors.white, child: Icon(Icons.close, color: Colors.black)),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    )
                   ],
                 ),
-              ),
-            ],
+                Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(child: Text(r.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold))),
+                          _buildStatusBadge(r),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(children: [const Icon(Icons.person, size: 16, color: Colors.grey), const SizedBox(width: 4), Text(r.ownerName, style: const TextStyle(fontSize: 16, color: Colors.grey))]),
+                      Row(children: [const Icon(Icons.phone, size: 16, color: Colors.grey), const SizedBox(width: 4), Text(r.phoneNumber, style: const TextStyle(fontSize: 16, color: Colors.grey))]),
+          
+                      const Divider(height: 30),
+                      _buildDetailRow(Icons.location_on, 'Địa chỉ', '${r.address}, ${r.district}, ${r.province}'),
+                      const SizedBox(height: 16),
+                      _buildDetailRow(Icons.description, 'Mô tả', r.description),
+                      const SizedBox(height: 16),
+                      _buildDetailRow(Icons.access_time, 'Giờ hoạt động', _formatOperatingHours(r.operatingHours)),
+                      const SizedBox(height: 30),
+          
+                      // [CÁC NÚT HÀNH ĐỘNG] - ĐƯỢC PHÂN TÁCH RÕ RÀNG
+          
+                      // TRƯỜNG HỢP 1: CHỜ DUYỆT (Hiện nút Từ chối & Duyệt)
+                      if (!r.isVerified && !r.isBanned) ...[
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  _confirmReject(context, r, widget.repo);
+                                },
+                                icon: const Icon(Icons.close), label: const Text("TỪ CHỐI"),
+                                style: OutlinedButton.styleFrom(foregroundColor: Colors.red, padding: const EdgeInsets.symmetric(vertical: 12)),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  widget.repo.updateRestaurantStatus(r.id, isVerified: true);
+                                  Navigator.pop(context);
+                                },
+                                icon: const Icon(Icons.check), label: const Text("DUYỆT NGAY"),
+                                style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
+                              ),
+                            ),
+                          ],
+                        )
+          
+                        // TRƯỜNG HỢP 2: ĐÃ KHÓA (Hiện nút Mở khóa)
+                      ] else if (r.isBanned) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              widget.repo.updateRestaurantStatus(r.id, isBanned: false);
+                              Navigator.pop(context);
+                            },
+                            icon: const Icon(Icons.lock_open), label: const Text("MỞ KHÓA TÀI KHOẢN"),
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 12)),
+                          ),
+                        )
+          
+                        // TRƯỜNG HỢP 3: ĐANG HOẠT ĐỘNG (Hiện nút Khóa)
+                      ] else ...[
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              widget.repo.updateRestaurantStatus(r.id, isBanned: true);
+                              Navigator.pop(context);
+                            },
+                            icon: const Icon(Icons.lock), label: const Text("KHÓA QUÁN ĂN"),
+                            style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red), padding: const EdgeInsets.symmetric(vertical: 12)),
+                          ),
+                        )
+                      ]
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

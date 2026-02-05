@@ -52,6 +52,7 @@ class RestaurantRepository {
         });
   }
 
+
   Future<String?> uploadImage(File imageFile, String ownerId) async {
     const String cloudName = "djvjimoti"; // Lấy từ Dashboard Cloudinary
     const String uploadPreset = "buaanyeuthuong"; // Tên preset bạn đã tạo
@@ -108,6 +109,65 @@ class RestaurantRepository {
       rethrow;
     }
   }
+  // [MỚI] Cập nhật số lượng suất ăn an toàn (Atomic Increment)
+  // Dùng cho tính năng: Chủ quán tự điều chỉnh số lượng (+/-)
+  Future<void> updateSuspendedMealsCount(String restaurantId, int amount) async {
+    try {
+      await _firestore.collection('restaurants').doc(restaurantId).update({
+        'suspendedMealsCount': FieldValue.increment(amount),
+      });
+    } catch (e) {
+      print("Lỗi cập nhật số suất ăn: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> updateRestaurantAndOwner({
+    required RestaurantModel updatedRestaurant,
+    required String ownerUid,
+    required String newPhoneNumber,
+  }) async {
+    final restaurantRef = _firestore.collection('restaurants').doc(updatedRestaurant.id);
+    final userRef = _firestore.collection('users').doc(ownerUid);
+
+    return _firestore.runTransaction((transaction) async {
+      transaction.update(restaurantRef, updatedRestaurant.toFirestore());
+      transaction.update(userRef, {
+        'phoneNumber': newPhoneNumber,
+        'updatedAt': Timestamp.now(),
+      });
+    });
+  }
+
+  // Lấy danh sách quán cho người dùng (Đã lọc kỹ)
+  Stream<List<RestaurantModel>> getAllActiveRestaurantsStream() {
+    return _firestore
+        .collection('restaurants')
+        .where('status', isEqualTo: RestaurantStatus.active.name)
+        .where('isVerified', isEqualTo: true) // Chỉ hiện quán đã duyệt
+        .where('isBanned', isEqualTo: false)  // Không hiện quán bị khóa
+        .snapshots()
+        .map((snapshot) {
+      try {
+        return snapshot.docs.map((doc) => RestaurantModel.fromFirestore(doc)).toList();
+      } catch (e) {
+        print("Lỗi parsing restaurant stream: $e");
+        return [];
+      }
+    });
+  }
+
+  Stream<List<RestaurantModel>> getRestaurantsWithSuspendedMealsStream() {
+    return _firestore
+        .collection('restaurants')
+        .where('status', isEqualTo: RestaurantStatus.active.name)
+        .where('isVerified', isEqualTo: true)
+        .where('isBanned', isEqualTo: false)
+        .where('suspendedMealsCount', isGreaterThan: 0)
+        .orderBy('suspendedMealsCount', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map((doc) => RestaurantModel.fromFirestore(doc)).toList());
+  }
 
   // Lấy tất cả các quán ăn đang hoạt động (trạng thái 'active')
   Future<List<RestaurantModel>> getAllActiveRestaurants() async {
@@ -127,64 +187,12 @@ class RestaurantRepository {
     }
   }
 
-  // Hàm này trả về Stream
-  Stream<List<RestaurantModel>> getAllActiveRestaurantsStream() {
-    return _firestore
-        .collection('restaurants')
-        .where('status', isEqualTo: RestaurantStatus.active.name)
-    .where('isVerified', isEqualTo: true)
-    .where('isBanned', isEqualTo: false)
-        .snapshots()
-        .map((snapshot) {
-          try {
-            // Chuyển đổi mỗi document trong snapshot thành một RestaurantModel
-            return snapshot.docs
-                .map((doc) => RestaurantModel.fromFirestore(doc))
-                .toList();
-          } catch (e) {
-            print("Lỗi khi parsing restaurant stream: $e");
-            return []; // Trả về danh sách rỗng nếu có lỗi parsing
-          }
-        });
-  }
 
-  Stream<List<RestaurantModel>> getRestaurantsWithSuspendedMealsStream() {
-    return _firestore
-        .collection('restaurants')
-        .where('status', isEqualTo: RestaurantStatus.active.name)
-    .where('isVerified', isEqualTo: true)
-    .where('isBanned', isEqualTo: false)
-        .where('suspendedMealsCount', isGreaterThan: 0)
-        .orderBy('suspendedMealsCount', descending: true)
-        .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
-              .map((doc) => RestaurantModel.fromFirestore(doc))
-              .toList(),
-        );
-  }
 
-  Future<void> updateRestaurantAndOwner({
-    required RestaurantModel updatedRestaurant,
-    required String ownerUid,
-    required String newPhoneNumber,
-  }) async {
-    // 1. Tạo các tham chiếu cần thiết
-    final restaurantRef = _firestore.collection('restaurants').doc(updatedRestaurant.id);
-    final userRef = _firestore.collection('users').doc(ownerUid);
 
-    // 2. Chạy một transaction
-    return _firestore.runTransaction((transaction) async {
-      // 3. Cập nhật document của quán ăn
-      transaction.update(restaurantRef, updatedRestaurant.toFirestore());
 
-      // 4. Cập nhật document của người dùng (chủ quán)
-      transaction.update(userRef, {
-        'phoneNumber': newPhoneNumber,
-        'updatedAt': Timestamp.now(),
-      });
-    });
-  }
+
+
 
 
 }

@@ -53,6 +53,12 @@ class _CreateMealEventScreenState extends State<CreateMealEventScreen> {
     final pickedTime = await showTimePicker(
       context: context,
       initialTime: (isStartTime ? _startTime : _endTime) ?? TimeOfDay.now(),
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+          child: child!,
+        );
+      },
     );
     if (pickedTime != null) {
       setState(() {
@@ -78,45 +84,35 @@ class _CreateMealEventScreenState extends State<CreateMealEventScreen> {
       return;
     }
 
-    // --- LOGIC XÁC THỰC THỜI GIAN ĐÃ SỬA HOÀN CHỈNH ---
+    // --- LOGIC XÁC THỰC GIỮ NGUYÊN ---
     final DateTime startDateTime = DateTime(
       _selectedDate!.year, _selectedDate!.month, _selectedDate!.day,
       _startTime!.hour, _startTime!.minute,
     );
-    // [SỬA LỖI] Sử dụng _endTime ở đây
     DateTime endDateTime = DateTime(
       _selectedDate!.year, _selectedDate!.month, _selectedDate!.day,
       _endTime!.hour, _endTime!.minute,
     );
 
-    // Logic kiểm tra qua đêm chặt chẽ
     bool isOvernight = _startTime!.hour >= 12 && _endTime!.hour < 12;
     if (isOvernight) {
       endDateTime = endDateTime.add(const Duration(days: 1));
     }
 
-    // Kiểm tra cuối cùng
     if (endDateTime.isBefore(startDateTime) || endDateTime.isAtSameMomentAs(startDateTime)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Lỗi: Giờ kết thúc phải sau giờ bắt đầu.'),
-          backgroundColor: Colors.red,
-        ),
+        const SnackBar(content: Text('Lỗi: Giờ kết thúc phải sau giờ bắt đầu.'), backgroundColor: Colors.red),
       );
       return;
     }
 
-    // Kiểm tra thời lượng
     if (endDateTime.difference(startDateTime).inHours >= 24) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Lỗi: Một đợt phát ăn không thể kéo dài quá 24 giờ.'),
-          backgroundColor: Colors.red,
-        ),
+        const SnackBar(content: Text('Lỗi: Một đợt phát ăn không thể kéo dài quá 24 giờ.'), backgroundColor: Colors.red),
       );
       return;
     }
-    // --- KẾT THÚC LOGIC XÁC THỰC ---
+    // --- KẾT THÚC LOGIC ---
 
     final viewModel = context.read<CreateMealEventViewModel>();
     final success = await viewModel.createMealEvent(
@@ -129,22 +125,34 @@ class _CreateMealEventScreenState extends State<CreateMealEventScreen> {
     );
 
     if (success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đã tạo đợt phát ăn thành công!')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đã tạo đợt phát ăn thành công!')));
       Navigator.of(context).pop();
     } else if (!success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(viewModel.errorMessage ?? 'Đã có lỗi xảy ra.')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(viewModel.errorMessage ?? 'Đã có lỗi xảy ra.')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Format hiển thị ngày giờ cho đẹp
+    final dateDisplay = _selectedDate != null
+        ? DateFormat('EEEE, dd/MM/yyyy', 'vi').format(_selectedDate!)
+        : 'Chọn ngày tổ chức';
+
+    final startTimeDisplay = _startTime != null
+        ? '${_startTime!.hour.toString().padLeft(2, '0')}:${_startTime!.minute.toString().padLeft(2, '0')}'
+        : '--:--';
+
+    final endTimeDisplay = _endTime != null
+        ? '${_endTime!.hour.toString().padLeft(2, '0')}:${_endTime!.minute.toString().padLeft(2, '0')}'
+        : '--:--';
+
     return Scaffold(
+      backgroundColor: Colors.grey.shade50, // Màu nền nhẹ nhàng
       appBar: AppBar(
-        title: const Text('Tạo đợt phát ăn mới'),
+        title: const Text('Tạo đợt phát ăn'),
+        elevation: 0,
+        centerTitle: true,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -153,67 +161,198 @@ class _CreateMealEventScreenState extends State<CreateMealEventScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TextFormField(
-                controller: _descriptionController,
-                decoration: const InputDecoration(labelText: 'Mô tả bữa ăn (VD: Cơm sườn)'),
-                validator: (value) => value!.isEmpty ? 'Vui lòng nhập mô tả' : null,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _quantityController,
-                decoration: const InputDecoration(labelText: 'Tổng số suất ăn dự kiến'),
-                keyboardType: TextInputType.number,
-                validator: (value) {
-                  if (value == null || value.isEmpty) return 'Vui lòng nhập số lượng';
-                  if (int.tryParse(value) == null || int.parse(value) <= 0) return 'Số không hợp lệ';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: TextEditingController(text: _selectedDate != null ? DateFormat('dd/MM/yyyy').format(_selectedDate!) : ''),
-                decoration: const InputDecoration(labelText: 'Ngày phát', hintText: 'Chọn ngày'),
-                readOnly: true,
-                onTap: _presentDatePicker,
-                validator: (value) => value!.isEmpty ? 'Vui lòng chọn ngày' : null,
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _startTimeController,
-                      decoration: const InputDecoration(labelText: 'Giờ bắt đầu'),
-                      readOnly: true,
-                      onTap: () => _presentTimePicker(true),
-                      validator: (value) => value!.isEmpty ? 'Vui lòng chọn giờ' : null,
-                    ),
+              // --- NHÓM 1: THÔNG TIN CƠ BẢN ---
+              _buildSectionTitle('Thông tin suất ăn'),
+              Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: Colors.grey.shade300),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      TextFormField(
+                        controller: _descriptionController,
+                        decoration: InputDecoration(
+                          labelText: 'Tên món / Mô tả',
+                          hintText: 'VD: Cơm sườn, Bún bò...',
+                          prefixIcon: const Icon(Icons.restaurant_menu, color: Colors.orange),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        ),
+                        validator: (value) => value!.isEmpty ? 'Vui lòng nhập mô tả' : null,
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _quantityController,
+                        decoration: InputDecoration(
+                          labelText: 'Số lượng suất',
+                          suffixText: 'suất',
+                          prefixIcon: const Icon(Icons.confirmation_number_outlined, color: Colors.orange),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        ),
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) return 'Vui lòng nhập số lượng';
+                          if (int.tryParse(value) == null || int.parse(value) <= 0) return 'Số không hợp lệ';
+                          return null;
+                        },
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _endTimeController,
-                      decoration: const InputDecoration(labelText: 'Giờ kết thúc'),
-                      readOnly: true,
-                      onTap: () => _presentTimePicker(false),
-                      validator: (value) => value!.isEmpty ? 'Vui lòng chọn giờ' : null,
-                    ),
-                  ),
-                ],
+                ),
               ),
+
+              const SizedBox(height: 24),
+
+              // --- NHÓM 2: THỜI GIAN ---
+              _buildSectionTitle('Thời gian tổ chức'),
+              Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: Colors.grey.shade300),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      // Widget chọn ngày tùy chỉnh
+                      InkWell(
+                        onTap: _presentDatePicker,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade400),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.calendar_today, color: Colors.orange),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  dateDisplay,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: _selectedDate != null ? FontWeight.bold : FontWeight.normal,
+                                    color: _selectedDate != null ? Colors.black87 : Colors.grey.shade600,
+                                  ),
+                                ),
+                              ),
+                              const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Row chứa 2 ô chọn giờ
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildCustomTimePicker(
+                              label: 'Bắt đầu',
+                              timeDisplay: startTimeDisplay,
+                              isSelected: _startTime != null,
+                              onTap: () => _presentTimePicker(true),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Icon(Icons.arrow_forward, color: Colors.grey),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildCustomTimePicker(
+                              label: 'Kết thúc',
+                              timeDisplay: endTimeDisplay,
+                              isSelected: _endTime != null,
+                              onTap: () => _presentTimePicker(false),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
               const SizedBox(height: 32),
+
+              // --- NÚT SUBMIT ---
               Consumer<CreateMealEventViewModel>(
                 builder: (context, viewModel, child) {
-                  return viewModel.isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : ElevatedButton(
-                    onPressed: _submitForm,
-                    child: const Text('Tạo đợt phát ăn'),
+                  return SizedBox(
+                    height: 54,
+                    child: ElevatedButton(
+                      onPressed: viewModel.isLoading ? null : _submitForm,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: viewModel.isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text(
+                        'XÁC NHẬN TẠO',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1),
+                      ),
+                    ),
                   );
                 },
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  // Widget tiêu đề section
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 8),
+      child: Text(
+        title,
+        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+      ),
+    );
+  }
+
+  // Widget chọn giờ tùy chỉnh (thay thế TextFormField)
+  Widget _buildCustomTimePicker({
+    required String label,
+    required String timeDisplay,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade400),
+          borderRadius: BorderRadius.circular(8),
+          color: Colors.white,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            const SizedBox(height: 4),
+            Text(
+              timeDisplay,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: isSelected ? Colors.black87 : Colors.grey.shade400,
+              ),
+            ),
+          ],
         ),
       ),
     );
