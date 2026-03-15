@@ -154,11 +154,11 @@
                 child: Padding(
                   padding: const EdgeInsets.all(24),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                    const Text("Dành cho khách không dùng App", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const Text("Kiểm tra bằng số điện thoại", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                     const SizedBox(height: 16),
                     TextField(
                       controller: _phoneController, keyboardType: TextInputType.phone,
-                      decoration: InputDecoration(labelText: "Nhập SĐT người nhận", border: const OutlineInputBorder(), suffixIcon: IconButton(icon: const Icon(Icons.search), onPressed: _handlePhoneSearch)),
+                      decoration: InputDecoration(labelText: "Nhập số điện thoại người nhận", border: const OutlineInputBorder(), suffixIcon: IconButton(icon: const Icon(Icons.search), onPressed: _handlePhoneSearch)),
                     ),
                     const SizedBox(height: 12),
                     ElevatedButton(onPressed: _handlePhoneSearch, style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)), child: const Text("Tìm kiếm & Phát món")),

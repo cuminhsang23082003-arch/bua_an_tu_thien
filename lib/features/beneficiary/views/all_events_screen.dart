@@ -9,7 +9,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-
 enum SortOption { byDate, byRemaining }
 
 class AllEventsScreen extends StatefulWidget {
@@ -76,18 +75,22 @@ class _AllEventsScreenState extends State<AllEventsScreen> {
     final mealEventRepo = context.read<MealEventRepository>();
 
     return Scaffold(
+      backgroundColor: Colors.grey.shade50, // Màu nền hiện đại
       appBar: AppBar(
-        title: const Text('Tất cả suất ăn'),
+        elevation: 0,
+        backgroundColor: Colors.white,
+        title: const Text('Tất cả suất ăn', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
+        iconTheme: const IconThemeData(color: Colors.black87),
         actions: [
           PopupMenuButton<SortOption>(
-            icon: const Icon(Icons.sort),
+            icon: const Icon(Icons.sort, color: Colors.orange),
             tooltip: 'Sắp xếp',
             onSelected: (SortOption result) {
               setState(() { _sortOption = result; });
             },
             itemBuilder: (BuildContext context) => <PopupMenuEntry<SortOption>>[
-              const PopupMenuItem<SortOption>(value: SortOption.byDate, child: Text('Theo ngày gần nhất')),
-              const PopupMenuItem<SortOption>(value: SortOption.byRemaining, child: Text('Theo số suất còn lại')),
+              const PopupMenuItem<SortOption>(value: SortOption.byDate, child: Text('Ngày gần nhất')),
+              const PopupMenuItem<SortOption>(value: SortOption.byRemaining, child: Text('Số suất còn lại')),
             ],
           ),
         ],
@@ -95,7 +98,6 @@ class _AllEventsScreenState extends State<AllEventsScreen> {
       body: Column(
         children: [
           _buildSearchAndFilterBar(),
-          const Divider(height: 1),
           Expanded(
             child: StreamBuilder<List<MealEventModel>>(
               stream: mealEventRepo.getAllActiveMealEventsStream(),
@@ -104,8 +106,7 @@ class _AllEventsScreenState extends State<AllEventsScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (snapshot.hasError) {
-                  print("Lỗi StreamBuilder: ${snapshot.error}");
-                  return const Center(child: Text('Đã có lỗi xảy ra.'));
+                  return Center(child: Text('Lỗi tải dữ liệu', style: TextStyle(color: Colors.grey.shade600)));
                 }
 
                 final allEvents = snapshot.data ?? [];
@@ -129,12 +130,22 @@ class _AllEventsScreenState extends State<AllEventsScreen> {
                 });
 
                 if (processedEvents.isEmpty) {
-                  return const Center(child: Text('Không có suất ăn nào phù hợp.'));
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.search_off, size: 64, color: Colors.grey.shade300),
+                        const SizedBox(height: 16),
+                        Text('Không tìm thấy suất ăn phù hợp', style: TextStyle(color: Colors.grey.shade600)),
+                      ],
+                    ),
+                  );
                 }
 
-                return ListView.builder(
-                  padding: const EdgeInsets.all(8.0),
+                return ListView.separated(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   itemCount: processedEvents.length,
+                  separatorBuilder: (ctx, index) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     return _buildEventCard(context, processedEvents[index]);
                   },
@@ -147,63 +158,62 @@ class _AllEventsScreenState extends State<AllEventsScreen> {
     );
   }
 
-  // [ĐẦY ĐỦ] Widget xây dựng giao diện bộ lọc ĐỘNG
+  // --- UI: KHỐI TÌM KIẾM & LỌC ---
   Widget _buildSearchAndFilterBar() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 5))],
+      ),
       child: Column(
         children: [
+          // Thanh tìm kiếm
           TextField(
             controller: _searchController,
             decoration: InputDecoration(
-              hintText: 'Tìm theo món ăn, tên quán...',
-              prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              isDense: true,
+              hintText: 'Tìm món ăn, quán...',
+              hintStyle: TextStyle(color: Colors.grey.shade400),
+              prefixIcon: const Icon(Icons.search, color: Colors.orange),
+              filled: true,
+              fillColor: Colors.grey.shade100,
+              contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 20),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
               suffixIcon: _searchQuery.isNotEmpty
-                  ? IconButton(icon: const Icon(Icons.clear), onPressed: () => _searchController.clear())
+                  ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () => _searchController.clear())
                   : null,
             ),
           ),
           const SizedBox(height: 12),
+          // Hàng Dropdown
           Row(
             children: [
               Expanded(
-                child: DropdownButtonFormField<Province>(
+                child: _buildDropdown<Province>(
                   value: _selectedProvince,
-                  hint: _isLoadingProvinces ? const Text('Đang tải...') : const Text('Tất cả Tỉnh/TP'),
-                  isExpanded: true,
-                  decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(8)),
-                  items: _provinces.map((p) => DropdownMenuItem(value: p, child: Text(p.name, overflow: TextOverflow.ellipsis))).toList(),
+                  hint: _isLoadingProvinces ? 'Đang tải...' : 'Tỉnh/TP',
+                  items: _provinces,
+                  displayFunc: (p) => p.name,
                   onChanged: (Province? newValue) {
                     setState(() {
                       _selectedProvince = newValue;
                       _selectedDistrict = null;
                       _districts = [];
                     });
-                    if (newValue != null) {
-                      _loadDistrictsForFilter(newValue.code);
-                    }
+                    if (newValue != null) _loadDistrictsForFilter(newValue.code);
                   },
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Expanded(
-                child: DropdownButtonFormField<District>(
+                child: _buildDropdown<District>(
                   value: _selectedDistrict,
-                  hint: _selectedProvince == null
-                      ? const Text('Chọn tỉnh trước')
-                      : (_isLoadingDistricts
-                      ? const Text('Đang tải...')
-                      : const Text('Tất cả Quận/Huyện')),
-                  isExpanded: true,
-                  decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.all(8)),
-                  items: _districts.map((d) => DropdownMenuItem(value: d, child: Text(d.name, overflow: TextOverflow.ellipsis))).toList(),
-                  onChanged: _selectedProvince == null ? null : (District? newValue) {
-                    setState(() {
-                      _selectedDistrict = newValue;
-                    });
-                  },
+                  hint: _isLoadingDistricts ? 'Đang tải...' : 'Quận/Huyện',
+                  items: _districts,
+                  displayFunc: (d) => d.name,
+                  enabled: _selectedProvince != null,
+                  onChanged: (District? newValue) => setState(() => _selectedDistrict = newValue),
                 ),
               ),
             ],
@@ -213,65 +223,158 @@ class _AllEventsScreenState extends State<AllEventsScreen> {
     );
   }
 
-  // [ĐẦY ĐỦ] Widget cho một Card hiển thị thông tin đợt phát ăn
+  Widget _buildDropdown<T>({
+    required T? value,
+    required String hint,
+    required List<T> items,
+    required String Function(T) displayFunc,
+    required Function(T?)? onChanged,
+    bool enabled = true,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: enabled ? Colors.white : Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          hint: Text(hint, style: TextStyle(fontSize: 13, color: Colors.grey.shade600), overflow: TextOverflow.ellipsis),
+          isExpanded: true,
+          icon: const Icon(Icons.keyboard_arrow_down, size: 20, color: Colors.grey),
+          items: items.map((item) {
+            return DropdownMenuItem<T>(
+              value: item,
+              child: Text(displayFunc(item), style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
+            );
+          }).toList(),
+          onChanged: enabled ? onChanged : null,
+        ),
+      ),
+    );
+  }
+
+  // --- UI: CARD SỰ KIỆN ---
   Widget _buildEventCard(BuildContext context, MealEventModel event) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      child: InkWell(
-        onTap: () {
-          Navigator.of(context).push(MaterialPageRoute(builder: (_) => MealEventDetailScreen(mealEvent: event)));
-        },
-        borderRadius: BorderRadius.circular(15),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(event.description, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              const SizedBox(height: 8),
-              Text('Tại: ${event.restaurantName}', style: TextStyle(fontSize: 15, color: Colors.grey.shade700, fontStyle: FontStyle.italic)),
-              const Divider(height: 20),
-              _buildInfoRow(Icons.pin_drop_outlined, '${event.district}, ${event.province}'),
-              const SizedBox(height: 6),
-              _buildInfoRow(Icons.calendar_today_outlined, DateFormat('dd/MM/yyyy').format(event.eventDate.toDate())),
-              const SizedBox(height: 6),
-              _buildInfoRow(Icons.access_time_outlined, '${event.startTime} - ${event.endTime}'),
-              const SizedBox(height: 6),
-              _buildInfoRow(Icons.restaurant_menu_outlined, 'Còn lại ${event.remainingMeals} suất'),
-              _buildSuspendedMealsInfo(context, event.restaurantId),
-            ],
+    final date = event.eventDate.toDate();
+    final isAvailable = event.remainingMeals > 0;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => MealEventDetailScreen(mealEvent: event))),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Khối ngày tháng (Calendar Box)
+                Container(
+                  width: 50,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(DateFormat('dd').format(date), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.deepOrange)),
+                      Text(DateFormat('MM').format(date), style: TextStyle(fontSize: 12, color: Colors.orange.shade800)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Thông tin chính
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(event.description, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), maxLines: 2, overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.storefront, size: 14, color: Colors.grey),
+                          const SizedBox(width: 4),
+                          Expanded(child: Text(event.restaurantName, style: TextStyle(fontSize: 13, color: Colors.grey.shade700), overflow: TextOverflow.ellipsis)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on_outlined, size: 14, color: Colors.grey),
+                          const SizedBox(width: 4),
+                          Expanded(child: Text('${event.district}, ${event.province}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600), overflow: TextOverflow.ellipsis)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      // Badge & Thông tin còn lại
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isAvailable ? Colors.green.shade50 : Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              isAvailable ? 'Còn ${event.remainingMeals} suất' : 'Hết suất',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isAvailable ? Colors.green : Colors.red),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(Icons.access_time, size: 12, color: Colors.grey.shade500),
+                          const SizedBox(width: 4),
+                          Text('${event.startTime} - ${event.endTime}', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                        ],
+                      ),
+                      // Suất ăn treo (Async Widget)
+                      _buildSuspendedMealsBadge(context, event.restaurantId),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  // [ĐẦY ĐỦ] Widget con để hiển thị một dòng thông tin
-  Widget _buildInfoRow(IconData icon, String text) {
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: Colors.grey.shade600),
-        const SizedBox(width: 8),
-        Expanded(child: Text(text, style: TextStyle(color: Colors.grey.shade800, fontSize: 15))),
-      ],
-    );
-  }
-
-  // [ĐẦY ĐỦ] Widget con để tải và hiển thị thông tin suất ăn treo
-  Widget _buildSuspendedMealsInfo(BuildContext context, String restaurantId) {
-    final restaurantRepo = context.read<RestaurantRepository>();
+  Widget _buildSuspendedMealsBadge(BuildContext context, String restaurantId) {
     return FutureBuilder<RestaurantModel?>(
-      future: restaurantRepo.getRestaurantById(restaurantId),
+      future: context.read<RestaurantRepository>().getRestaurantById(restaurantId),
       builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data == null || snapshot.data!.suspendedMealsCount == 0) {
-          return const SizedBox.shrink();
-        }
-        final count = snapshot.data!.suspendedMealsCount;
-        return Padding(
-          padding: const EdgeInsets.only(top: 6.0),
-          child: _buildInfoRow(Icons.card_giftcard, 'Có $count suất ăn treo'),
+        if (!snapshot.hasData || snapshot.data?.suspendedMealsCount == 0) return const SizedBox.shrink();
+        return Container(
+          margin: const EdgeInsets.only(top: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: Colors.blue.shade100),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.card_giftcard, size: 12, color: Colors.blue),
+              const SizedBox(width: 4),
+              Text(
+                'Có ${snapshot.data!.suspendedMealsCount} suất treo miễn phí',
+                style: const TextStyle(fontSize: 11, color: Colors.blue, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
         );
       },
     );

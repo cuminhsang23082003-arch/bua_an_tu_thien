@@ -1,11 +1,6 @@
-// lib/features/beneficiary/views/my_registrations_tab.dart
 import 'package:buaanyeuthuong/features/authentication/viewmodels/auth_viewmodel.dart';
 import 'package:buaanyeuthuong/features/beneficiary/models/registration_model.dart';
 import 'package:buaanyeuthuong/features/beneficiary/repositories/registration_repository.dart';
-import 'package:buaanyeuthuong/features/meal_events/models/meal_event_model.dart';
-import 'package:buaanyeuthuong/features/meal_events/repositories/meal_event_repository.dart';
-import 'package:buaanyeuthuong/features/restaurants/models/restaurant_model.dart';
-import 'package:buaanyeuthuong/features/restaurants/repositories/restaurant_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -20,27 +15,38 @@ class MyRegistrationsTab extends StatelessWidget {
     final authUser = context.watch<AuthViewModel>().currentUser;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Hoạt động của tôi')),
+      backgroundColor: Colors.grey.shade50,
+      appBar: AppBar(title: const Text('Vé ăn của tôi'), elevation: 0),
       body: authUser == null
-          ? const Center(child: Text('Vui lòng đăng nhập để xem.'))
+          ? const Center(child: Text('Vui lòng đăng nhập.'))
           : StreamBuilder<List<RegistrationModel>>(
         stream: registrationRepo.getMyRegistrationsStream(authUser.uid),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (snapshot.hasError) {
-            return const Center(child: Text('Đã có lỗi xảy ra.'));
-          }
           final registrations = snapshot.data ?? [];
+
           if (registrations.isEmpty) {
-            return const Center(child: Text('Bạn chưa đăng ký suất ăn nào.'));
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.receipt_long, size: 60, color: Colors.grey.shade300),
+                  const SizedBox(height: 16),
+                  const Text('Bạn chưa có vé ăn nào.', style: TextStyle(color: Colors.grey)),
+                ],
+              ),
+            );
           }
-          return ListView.builder(
-            padding: const EdgeInsets.all(8.0),
+
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
             itemCount: registrations.length,
+            separatorBuilder: (ctx, i) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
-              return RegistrationInfoCard(registration: registrations[index]);
+              // [TỐI ƯU] Không dùng FutureBuilder nữa
+              return _RegistrationCard(registration: registrations[index]);
             },
           );
         },
@@ -49,177 +55,154 @@ class MyRegistrationsTab extends StatelessWidget {
   }
 }
 
-class RegistrationInfoCard extends StatelessWidget {
+class _RegistrationCard extends StatelessWidget {
   final RegistrationModel registration;
-  const RegistrationInfoCard({Key? key, required this.registration}) : super(key: key);
+  const _RegistrationCard({Key? key, required this.registration}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final bool isSuspendedMealClaim = registration.mealEventId.isEmpty;
-    if (isSuspendedMealClaim) {
-      return _buildSuspendedMealCard(context);
+    // Lấy SĐT từ ViewModel để hiển thị
+    final userPhone = context.select<AuthViewModel, String?>((vm) => vm.currentUser?.phoneNumber);
+
+    final isRegistered = registration.status == RegistrationStatus.registered;
+    final isClaimed = registration.status == RegistrationStatus.claimed;
+
+    Color statusColor;
+    String statusText;
+    IconData statusIcon;
+
+    if (isRegistered) {
+      statusColor = Colors.orange;
+      statusText = "CHỜ NHẬN";
+      statusIcon = Icons.hourglass_top;
+    } else if (isClaimed) {
+      statusColor = Colors.green;
+      statusText = "ĐÃ NHẬN";
+      statusIcon = Icons.check_circle;
     } else {
-      return _buildMealEventCard(context);
+      statusColor = Colors.red;
+      statusText = "ĐÃ HỦY";
+      statusIcon = Icons.cancel;
     }
-  }
 
-  // Widget cho Card suất ăn treo - ĐÃ SỬA LẠI
-  Widget _buildSuspendedMealCard(BuildContext context) {
-    final restaurantRepo = context.read<RestaurantRepository>();
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: FutureBuilder<RestaurantModel?>(
-        future: restaurantRepo.getRestaurantById(registration.restaurantId),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData && snapshot.connectionState == ConnectionState.waiting) {
-            return const SizedBox(height: 150, child: Center(child: CircularProgressIndicator()));
-          }
-          final restaurantName = snapshot.data?.name ?? 'Quán ăn không xác định';
-
-          // [SỬA LỖI] Bọc nội dung trong Padding
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header: Trạng thái + Ngày
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Suất ăn treo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-                const SizedBox(height: 4),
-                Text('Tại: $restaurantName', style: TextStyle(color: Colors.grey.shade600, fontStyle: FontStyle.italic)),
-                const Divider(height: 20),
-                Text('Ngày đăng ký: ${DateFormat('dd/MM/yyyy').format(registration.registeredAt.toDate())}'),
-                const SizedBox(height: 16),
-                _buildActionWidget(context),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  // Widget cho Card đợt phát ăn
-  Widget _buildMealEventCard(BuildContext context) {
-    final mealEventRepo = context.read<MealEventRepository>();
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: FutureBuilder<MealEventModel?>(
-        future: mealEventRepo.getMealEventById(registration.mealEventId),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData && snapshot.connectionState == ConnectionState.waiting) {
-            return const SizedBox(height: 180, child: Center(child: CircularProgressIndicator()));
-          }
-          if (snapshot.data == null) {
-            return ListTile(
-              leading: const Icon(Icons.error_outline, color: Colors.red),
-              title: const Text('Thông tin đợt phát ăn không còn tồn tại.'),
-              subtitle: Text('ID: ${registration.mealEventId}'),
-            );
-          }
-          final mealEvent = snapshot.data!;
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(mealEvent.description, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-                const SizedBox(height: 4),
-                Text('Tại: ${mealEvent.restaurantName}', style: TextStyle(color: Colors.grey.shade600, fontStyle: FontStyle.italic)),
-                const Divider(height: 20),
-                Text('Ngày nhận: ${DateFormat('dd/MM/yyyy').format(mealEvent.eventDate.toDate())}'),
-                Text('Thời gian: ${mealEvent.startTime} - ${mealEvent.endTime}'),
-                const SizedBox(height: 16),
-                _buildActionWidget(context),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  // Widget chung để hiển thị nút QR hoặc Chip trạng thái
-  Widget _buildActionWidget(BuildContext context) {
-    return Center(
-      child: registration.status == RegistrationStatus.registered
-          ? SizedBox(
-        width: double.infinity,
-        child: ElevatedButton.icon(
-          icon: const Icon(Icons.qr_code_2_rounded),
-          label: const Text('Hiển thị mã nhận'),
-          onPressed: () => _showQrCodeDialog(context, registration.id),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFFF6B6B),
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-        ),
-      )
-          : Chip(
-        label: Text(
-          registration.status == RegistrationStatus.claimed ? 'ĐÃ NHẬN' : 'ĐÃ HỦY',
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: registration.status == RegistrationStatus.claimed ? Colors.green.shade400 : Colors.red.shade300,
-      ),
-    );
-  }
-
-  void _showQrCodeDialog(BuildContext context, String registrationId) {
-    showDialog(
-      context: context,
-      builder: (ctx) =>
-          AlertDialog(
-            contentPadding: const EdgeInsets.all(24.0),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20)),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Đưa mã này cho nhân viên để xác nhận nhận suất ăn',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16),
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: 220,
-                  height: 220,
-                  child: QrImageView(
-                    data: registrationId,
-                    version: QrVersions.auto,
-                    gapless: false,
-                    // Để có viền trắng đẹp hơn
-                    eyeStyle: const QrEyeStyle(
-                      eyeShape: QrEyeShape.square,
-                      color: Colors.black,
-                    ),
-                    dataModuleStyle: const QrDataModuleStyle(
-                      dataModuleShape: QrDataModuleShape.square,
-                      color: Colors.black,
-                    ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(statusIcon, size: 14, color: statusColor),
+                      const SizedBox(width: 4),
+                      Text(statusText, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 16),
-                SelectableText(
-                  registrationId,
-                  style: const TextStyle(fontSize: 10, color: Colors.grey),
+                Text(
+                  DateFormat('dd/MM/yyyy HH:mm').format(registration.registeredAt.toDate()),
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                 ),
               ],
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('Đóng'),
+            const Divider(height: 24),
+
+            // Nội dung chính (Lấy từ trường denormalized)
+            Text(registration.eventDescription, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.storefront, size: 16, color: Colors.grey),
+                const SizedBox(width: 6),
+                Expanded(child: Text(registration.restaurantName, style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w500))),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.access_time, size: 16, color: Colors.grey),
+                const SizedBox(width: 6),
+                Text(registration.eventTimeDisplay, style: TextStyle(color: Colors.grey.shade700)),
+              ],
+            ),
+
+            // [QUAN TRỌNG] Hiển thị SĐT để đối chiếu với chủ quán
+            if (isRegistered) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
+                child: Row(
+                  children: [
+                    const Icon(Icons.phone_android, size: 16, color: Colors.blueGrey),
+                    const SizedBox(width: 8),
+                    const Text("SĐT nhận món: ", style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    Text(
+                        userPhone ?? "Chưa cập nhật",
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.blueGrey)
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
+
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _showQrDialog(context),
+                  icon: const Icon(Icons.qr_code_2),
+                  label: const Text("MÃ QR NHẬN SUẤT"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              )
+            ]
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showQrDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        contentPadding: const EdgeInsets.all(24),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text("Đưa mã này cho quán", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: 200,
+              height: 200,
+              child: QrImageView(
+                data: registration.id,
+                version: QrVersions.auto,
+                eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(registration.id, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+          ],
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Đóng"))],
+      ),
     );
   }
 }
-
-
-

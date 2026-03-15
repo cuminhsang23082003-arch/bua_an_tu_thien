@@ -14,6 +14,12 @@ class RegistrationModel extends Equatable {
   final RegistrationStatus status;
   final Timestamp registeredAt;
   final Timestamp? claimedAt;
+  //Luu du thua de load nhanh
+  final String restaurantName;
+  final String restaurantAddress;
+  final String eventDescription;
+  final String eventTimeDisplay;
+
 
   const RegistrationModel({
     required this.id,
@@ -23,6 +29,11 @@ class RegistrationModel extends Equatable {
     this.status = RegistrationStatus.registered,
     required this.registeredAt,
     this.claimedAt,
+
+    this.restaurantName ='',
+    this.restaurantAddress ='',
+    this.eventDescription ='',
+    this.eventTimeDisplay ='',
 });
 
   Map<String, dynamic> toFirestore(){
@@ -33,6 +44,10 @@ class RegistrationModel extends Equatable {
       'status':status.name,
       'registeredAt':registeredAt,
       'claimedAt':claimedAt,
+      'restaurantName' : restaurantName,
+      'restaurantAddress' : restaurantAddress,
+      'eventDescription' : eventDescription,
+      'eventTimeDisplay' : eventTimeDisplay,
     };
   }
 
@@ -47,8 +62,13 @@ class RegistrationModel extends Equatable {
             (e) => e.name == data['status'],
         orElse: () => RegistrationStatus.registered,
       ),
-      registeredAt: data['registeredAt'] ?? Timestamp.now(),
-      claimedAt: data['claimedAt'], // có thể là null
+      registeredAt: (data['registeredAt'] as Timestamp?) ?? Timestamp.now(),
+      claimedAt: data['claimedAt'] as Timestamp?,
+      restaurantName: data['restaurantName'] ?? 'Đang tải...',
+      restaurantAddress: data['restaurantAddress'] ?? '',
+      eventDescription: data['eventDescription'] ?? 'Suất ăn từ thiện',
+      eventTimeDisplay: data['eventTimeDisplay'] ?? '',
+
     );
   }
 

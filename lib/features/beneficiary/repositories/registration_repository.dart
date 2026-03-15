@@ -11,38 +11,31 @@ class RegistrationRepository {
   RegistrationRepository({FirebaseFirestore? firestore})
       : _firestore = firestore ?? FirebaseFirestore.instance;
 
-  Stream<List<RegistrationModel>> getMyRegistrationsStream(
-      String beneficiaryUid,) {
+  Stream<List<RegistrationModel>> getMyRegistrationsStream(String beneficiaryUid) {
     return _firestore
         .collection('registrations')
         .where('beneficiaryUid', isEqualTo: beneficiaryUid)
         .orderBy('registeredAt', descending: true)
         .snapshots()
-        .map(
-          (snapshot) =>
-          snapshot.docs
-              .map((doc) => RegistrationModel.fromFirestore(doc))
-              .toList(),
-    );
+        .map((snapshot) => snapshot.docs
+        .map((doc) => RegistrationModel.fromFirestore(doc))
+        .toList());
   }
 
-  // [SỬA LỖI] Sửa lỗi chính tả tên hàm và định nghĩa tham số
-  Future<void> registerForMealEvent(MealEventModel mealEvent,
-      UserModel user,) async {
+  // 1. Đăng ký Đợt phát ăn
+  Future<void> registerForMealEvent(MealEventModel mealEvent, UserModel user) async {
     final eventRef = _firestore.collection('mealEvents').doc(mealEvent.id);
     final registrationRef = _firestore.collection('registrations').doc();
     final registrationsCollection = _firestore.collection('registrations');
 
     return _firestore.runTransaction((transaction) async {
       final eventSnapshot = await transaction.get(eventRef);
-      if (!eventSnapshot.exists) {
-        throw Exception('Đợt phát ăn không còn tồn tại!');
-      }
+      if (!eventSnapshot.exists) throw Exception('Đợt phát ăn không còn tồn tại!');
+
       final currentEventData = MealEventModel.fromFirestore(eventSnapshot);
 
-      if (currentEventData.remainingMeals <= 0) {
-        throw Exception('Rất tiếc, suất ăn đã được đăng ký hết!');
-      }
+      if (currentEventData.remainingMeals <= 0) throw Exception('Rất tiếc, suất ăn đã được đăng ký hết!');
+
       if (currentEventData.effectiveStatus != MealEventStatus.scheduled &&
           currentEventData.effectiveStatus != MealEventStatus.ongoing) {
         throw Exception("Đợt phát ăn này không còn mở để đăng ký.");
@@ -54,9 +47,7 @@ class RegistrationRepository {
           .limit(1);
 
       final existingDocs = await existingRegistrationQuery.get();
-      if (existingDocs.docs.isNotEmpty) {
-        throw Exception("Bạn đã đăng ký nhận suất ăn này rồi.");
-      }
+      if (existingDocs.docs.isNotEmpty) throw Exception("Bạn đã đăng ký nhận suất ăn này rồi.");
 
       transaction.update(eventRef, {
         'remainingMeals': FieldValue.increment(-1),
@@ -69,13 +60,17 @@ class RegistrationRepository {
         mealEventId: mealEvent.id,
         restaurantId: mealEvent.restaurantId,
         registeredAt: Timestamp.now(),
+        restaurantName: mealEvent.restaurantName,
+        restaurantAddress: "${mealEvent.district}, ${mealEvent.province}",
+        eventDescription: mealEvent.description,
+        eventTimeDisplay: "${mealEvent.startTime} - ${mealEvent.endTime}",
       );
       transaction.set(registrationRef, newRegistration.toFirestore());
     });
   }
 
-  Future<void> claimSuspendedMeal(RestaurantModel restaurant,
-      UserModel user,) async {
+  // 2. Nhận suất ăn treo
+  Future<void> claimSuspendedMeal(RestaurantModel restaurant, UserModel user) async {
     final existingRegistrationQuery = _firestore
         .collection('registrations')
         .where('beneficiaryUid', isEqualTo: user.uid)
@@ -89,18 +84,14 @@ class RegistrationRepository {
       throw Exception("Bạn đã có một suất ăn treo đang chờ nhận tại quán này.");
     }
 
-    final restaurantRef = _firestore
-        .collection('restaurants')
-        .doc(restaurant.id);
+    final restaurantRef = _firestore.collection('restaurants').doc(restaurant.id);
     final registrationRef = _firestore.collection('registrations').doc();
 
     return _firestore.runTransaction((transaction) async {
       final restaurantSnapshot = await transaction.get(restaurantRef);
       if (!restaurantSnapshot.exists) throw Exception("Quán ăn không tồn tại.");
 
-      final currentRestaurant = RestaurantModel.fromFirestore(
-        restaurantSnapshot,
-      );
+      final currentRestaurant = RestaurantModel.fromFirestore(restaurantSnapshot);
       if (currentRestaurant.suspendedMealsCount <= 0) {
         throw Exception("Rất tiếc, quán đã hết suất ăn treo.");
       }
@@ -116,10 +107,16 @@ class RegistrationRepository {
         restaurantId: restaurant.id,
         status: RegistrationStatus.registered,
         registeredAt: Timestamp.now(),
+        restaurantName: restaurant.name,
+        restaurantAddress: restaurant.address,
+        eventDescription: "Suất ăn treo miễn phí",
+        eventTimeDisplay: "Trong giờ mở cửa",
       );
       transaction.set(registrationRef, newRegistration.toFirestore());
     });
   }
+
+  // [ĐÃ SỬA LỖI] Check-in bằng QR hoặc ID (Có kiểm tra trạng thái Event)
   Future<String> claimRegistration(String registrationId) async {
     final ref = _firestore.collection('registrations').doc(registrationId);
     try {
@@ -130,6 +127,20 @@ class RegistrationRepository {
       if (reg.status == RegistrationStatus.claimed) return "Suất này đã được nhận rồi.";
       if (reg.status == RegistrationStatus.cancelled) return "Suất này đã bị hủy.";
 
+      // Kiểm tra trạng thái sự kiện gốc
+      if (reg.mealEventId.isNotEmpty) {
+        final eventDoc = await _firestore.collection('mealEvents').doc(reg.mealEventId).get();
+        if (!eventDoc.exists) {
+          return "Lỗi: Đợt phát suất ăn không tồn tại.";
+        }
+        final event = MealEventModel.fromFirestore(eventDoc);
+
+        // Chỉ cho nhận nếu đang diễn ra hoặc sắp diễn ra (chưa bị hủy/kết thúc)
+        if (event.status == MealEventStatus.completed || event.status == MealEventStatus.cancelled) {
+          return "Không thể nhận: Đợt phát ăn này đã kết thúc hoặc bị hủy.";
+        }
+      } // [ĐÃ SỬA] Đóng ngoặc if bị thiếu ở code cũ
+
       await ref.update({'status': RegistrationStatus.claimed.name, 'claimedAt': Timestamp.now()});
       return "Xác nhận thành công!";
     } catch (e) {
@@ -137,7 +148,7 @@ class RegistrationRepository {
     }
   }
 
-  // 2. Tìm User theo SĐT (Để check-in cho người không có smartphone)
+  // Helper: Tìm user
   Future<UserModel?> findUserByPhone(String phone) async {
     final snapshot = await _firestore.collection('users')
         .where('phoneNumber', isEqualTo: phone).limit(1).get();
@@ -145,23 +156,48 @@ class RegistrationRepository {
     return null;
   }
 
-  // 3. Tìm Vé đã đặt bằng SĐT (Nếu họ đã đặt ở nhà nhưng quên mang điện thoại)
+  // [QUAN TRỌNG] Tìm vé bằng SĐT (Đã thêm logic lọc sự kiện cũ)
   Future<List<RegistrationModel>> findPendingRegistrationsByPhone(String phone, String restaurantId) async {
-    // Lưu ý: Tốt nhất là lưu phoneNumber vào RegistrationModel.
-    // Nếu chưa có, ta phải tìm User trước -> Lấy UID -> Tìm Registration
     final user = await findUserByPhone(phone);
     if (user == null) return [];
 
+    // 1. Lấy tất cả vé đang 'registered'
     final snapshot = await _firestore.collection('registrations')
         .where('restaurantId', isEqualTo: restaurantId)
         .where('beneficiaryUid', isEqualTo: user.uid)
         .where('status', isEqualTo: RegistrationStatus.registered.name)
         .get();
 
-    return snapshot.docs.map((d) => RegistrationModel.fromFirestore(d)).toList();
+    final allRegs = snapshot.docs.map((d) => RegistrationModel.fromFirestore(d)).toList();
+    final List<RegistrationModel> validRegs = [];
+
+    // 2. Lọc bỏ vé của sự kiện đã kết thúc
+    for (var reg in allRegs) {
+      // Vé suất ăn treo (không có mealEventId) -> Luôn hợp lệ
+      if (reg.mealEventId.isEmpty) {
+        validRegs.add(reg);
+        continue;
+      }
+
+      // Vé đợt phát -> Kiểm tra mealEvents collection
+      try {
+        final eventDoc = await _firestore.collection('mealEvents').doc(reg.mealEventId).get();
+        if (eventDoc.exists) {
+          final event = MealEventModel.fromFirestore(eventDoc);
+          // Chỉ lấy sự kiện chưa kết thúc/hủy
+          if (event.status != MealEventStatus.completed && event.status != MealEventStatus.cancelled) {
+            validRegs.add(reg);
+          }
+        }
+      } catch (_) {
+        // Bỏ qua nếu lỗi mạng
+      }
+    }
+
+    return validRegs;
   }
 
-  // 4. Nhận trực tiếp (Direct Claim) - Dành cho người có TK nhưng chưa đặt
+  // Nhận trực tiếp (Không có vé trước)
   Future<void> claimDirectlyForUser(String restaurantId, UserModel user) async {
     final resRef = _firestore.collection('restaurants').doc(restaurantId);
     final regRef = _firestore.collection('registrations').doc();
@@ -180,15 +216,19 @@ class RegistrationRepository {
         beneficiaryUid: user.uid,
         mealEventId: '',
         restaurantId: restaurantId,
-        status: RegistrationStatus.claimed, // Đã nhận luôn
+        status: RegistrationStatus.claimed,
         registeredAt: Timestamp.now(),
         claimedAt: Timestamp.now(),
+        restaurantName: resSnapshot.data()?['name'] ?? 'Quán ăn',
+        restaurantAddress: resSnapshot.data()?['address'] ?? '',
+        eventDescription: "Suất ăn trực tiếp",
+        eventTimeDisplay: "Vừa nhận",
       );
       transaction.set(regRef, newReg.toFirestore());
     });
   }
 
-  // 5. Phát cho khách vãng lai (Anonymous) - Không cần tài khoản
+  // Vãng lai
   Future<void> claimForWalkInGuest(String restaurantId) async {
     final resRef = _firestore.collection('restaurants').doc(restaurantId);
     final regRef = _firestore.collection('registrations').doc();
@@ -203,29 +243,27 @@ class RegistrationRepository {
       transaction.set(regRef, {
         'id': regRef.id,
         'restaurantId': restaurantId,
+        'restaurantName': resSnapshot.data()?['name'],
         'beneficiaryUid': 'ANONYMOUS',
         'status': RegistrationStatus.claimed.name,
         'registeredAt': Timestamp.now(),
         'claimedAt': Timestamp.now(),
-        'note': 'Khách vãng lai', // Đánh dấu
+        'eventDescription': 'Khách vãng lai',
+        'note': 'Phát trực tiếp không cần tài khoản',
       });
     });
   }
 
-  //Thong ke
+  // --- Thống kê ---
   Stream<int> getTodayRegistrationCountStream(String restaurantId) {
-    //lay thoi diem bat dau cua ngay hom nay
     final now = DateTime.now();
     final startOfToday = DateTime(now.year, now.month, now.day);
-    final startOfTodayTimestamp = Timestamp.fromDate(startOfToday);
-
     return _firestore
         .collection('registrations')
         .where('restaurantId', isEqualTo: restaurantId)
-    //lay cac luot dang ky duoc tao tu ngay hom nay tro di
-        .where('registeredAt', isGreaterThanOrEqualTo: startOfTodayTimestamp)
+        .where('registeredAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfToday))
         .snapshots()
-        .map((snapshot) => snapshot.size); //size tra ve so luong document
+        .map((snapshot) => snapshot.size);
   }
 
   Stream<int> getTodaysClaimedCountStream(String restaurantId) {
@@ -242,7 +280,7 @@ class RegistrationRepository {
         .map((s) => s.size);
   }
 
-  Stream <int> getTotalClaimedMealsStream(String restaurantId) {
+  Stream<int> getTotalClaimedMealsStream(String restaurantId) {
     return _firestore
         .collection('registrations')
         .where('restaurantId', isEqualTo: restaurantId)
@@ -251,22 +289,19 @@ class RegistrationRepository {
         .map((snapshot) => snapshot.size);
   }
 
-  //Dem so luot da nhan (claimed) trong mot khoang thoi gian
-  Future <int> getClaimedByDateRange(String restaurantId, DateTime startDate,
-      DateTime endDate) async {
+  Future<int> getClaimedByDateRange(String restaurantId, DateTime startDate, DateTime endDate) async {
     try {
       final snapshot = await _firestore
           .collection('registrations')
           .where('restaurantId', isEqualTo: restaurantId)
           .where('status', isEqualTo: RegistrationStatus.claimed.name)
-          .where(
-          'claimedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
+          .where('claimedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
           .where('claimedAt', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
           .count()
           .get();
       return snapshot.count ?? 0;
     } catch (e) {
-      print('Lỗi đếm lượt đã nhận: $e"');
+      print('Lỗi đếm lượt đã nhận: $e');
       return 0;
     }
   }
@@ -279,7 +314,7 @@ class RegistrationRepository {
         .where('status', isEqualTo: RegistrationStatus.claimed.name)
         .where('claimedAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
         .where('claimedAt', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
-        .orderBy('claimedAt', descending: true) // Mới nhất lên đầu
+        .orderBy('claimedAt', descending: true)
         .snapshots()
         .map((snapshot) => snapshot.docs.map((doc) => RegistrationModel.fromFirestore(doc)).toList());
   }

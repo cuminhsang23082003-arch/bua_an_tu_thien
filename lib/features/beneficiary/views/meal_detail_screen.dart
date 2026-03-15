@@ -1,4 +1,3 @@
-// lib/features/beneficiary/views/meal_detail_screen.dart
 import 'package:buaanyeuthuong/features/beneficiary/viewmodels/beneficiary_viewmodel.dart';
 import 'package:buaanyeuthuong/features/meal_events/models/meal_event_model.dart';
 import 'package:buaanyeuthuong/features/restaurants/models/restaurant_model.dart';
@@ -6,98 +5,163 @@ import 'package:buaanyeuthuong/features/restaurants/repositories/restaurant_repo
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart'; // (Tùy chọn: cần thêm vào pubspec.yaml nếu muốn dùng thật)
 
 import '../../authentication/viewmodels/auth_viewmodel.dart';
 
 class MealEventDetailScreen extends StatelessWidget {
   final MealEventModel mealEvent;
-  const MealEventDetailScreen({Key? key, required this.mealEvent}) : super(key: key);
+
+  const MealEventDetailScreen({Key? key, required this.mealEvent})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: CustomScrollView(
         slivers: [
-          // AppBar với ảnh nền
           _buildSliverAppBar(context),
-
-          // Nội dung chi tiết
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(20.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // 1. Thông tin chính (Hiển thị ngay, không cần chờ mạng)
+                  _buildHeaderSection(context),
+
+                  const Divider(height: 32, thickness: 1, color: Colors.grey),
+
+                  // 2. Thông tin chi tiết địa điểm (Cần load thêm từ RestaurantRepo)
                   Text(
-                    mealEvent.description,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildInfoRow(context, Icons.storefront_outlined, 'Phát tại: ${mealEvent.restaurantName}'),
-                  const SizedBox(height: 8),
-                  _buildInfoRow(context, Icons.calendar_today_outlined, 'Ngày: ${DateFormat('dd/MM/yyyy').format(mealEvent.eventDate.toDate())}'),
-                  const SizedBox(height: 8),
-                  _buildInfoRow(context, Icons.access_time_outlined, 'Thời gian: ${mealEvent.startTime} - ${mealEvent.endTime}'),
-                  const SizedBox(height: 8),
-                  _buildInfoRow(context, Icons.restaurant_menu_outlined, 'Số suất còn lại: ${mealEvent.remainingMeals}'),
-                  const Divider(height: 40),
-                  Text(
-                    'Thông tin thêm về điểm phát',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                    'Thông tin điểm phát',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
                   _buildRestaurantDetails(context),
+
+                  const SizedBox(height: 100), // Khoảng trống cho nút Bottom
                 ],
               ),
             ),
           )
         ],
       ),
-      // Nút Đăng ký nhận ở dưới cùng
       bottomNavigationBar: _buildBottomButton(context),
     );
   }
 
+  // Header ảnh bìa mượt mà
   Widget _buildSliverAppBar(BuildContext context) {
     final restaurantRepo = context.read<RestaurantRepository>();
-    return FutureBuilder<RestaurantModel?>(
-        future: restaurantRepo.getRestaurantById(mealEvent.restaurantId),
-        builder: (context, snapshot)
-    {
-      final restaurantImage = snapshot.data?.imageUrl;
-      return SliverAppBar(
-        expandedHeight: 250.0,
-        pinned: true,
-        stretch: true,
 
-        leading: Container(
-          margin: const EdgeInsets.all(8.0),
+    return SliverAppBar(
+      expandedHeight: 250.0,
+      pinned: true,
+      stretch: true,
+      backgroundColor: Colors.orange,
+      leading: Container(
+        margin: const EdgeInsets.all(8.0),
+        decoration: BoxDecoration(
+          color: Colors.black45,
+          shape: BoxShape.circle,
+        ),
+        child: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      flexibleSpace: FlexibleSpaceBar(
+        stretchModes: const [StretchMode.zoomBackground],
+        background: FutureBuilder<RestaurantModel?>(
+          future: restaurantRepo.getRestaurantById(mealEvent.restaurantId),
+          builder: (context, snapshot) {
+            // Hiển thị ảnh nếu có, hoặc placeholder
+            if (snapshot.hasData && snapshot.data?.imageUrl != null) {
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.network(
+                    snapshot.data!.imageUrl!,
+                    fit: BoxFit.cover,
+                  ),
+                  // Lớp phủ gradient để ảnh đẹp hơn
+                  const DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.black26, Colors.transparent, Colors.black12],
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
+            return Container(
+              color: Colors.orange.shade100,
+              child: const Center(
+                child: Icon(Icons.storefront, size: 80, color: Colors.orange),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderSection(BuildContext context) {
+    // Dùng getter status từ Model
+    final isAvailable = mealEvent.remainingMeals > 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Badge trạng thái
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.4),
-            shape: BoxShape.circle,
+            color: isAvailable ? Colors.green.shade50 : Colors.red.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: isAvailable ? Colors.green : Colors.red),
           ),
-          child: IconButton(
-              onPressed: (){
-                Navigator.of(context).pop();
-              },
-            tooltip: 'Quay lại',
-            icon: const Icon(Icons.arrow_back,color: Colors.white),
+          child: Text(
+            isAvailable ? 'Đang phát' : 'Đã hết suất',
+            style: TextStyle(
+              color: isAvailable ? Colors.green.shade700 : Colors.red.shade700,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
           ),
         ),
-        flexibleSpace: FlexibleSpaceBar(
-          background: restaurantImage != null
-              ? Image.network(
-            restaurantImage,
-            fit: BoxFit.cover,
-            errorBuilder: (ctx, err, st) =>
-            const Icon(Icons.storefront,
-                size: 100, color: Colors.grey),
-          )
-              : Container(color: Colors.grey.shade300, child: const
-          Icon(Icons.food_bank_outlined, size: 100, color: Colors.grey)),
+        const SizedBox(height: 12),
+        Text(
+          mealEvent.description,
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.bold,
+            height: 1.3,
+          ),
         ),
-      );
-    },);
+        const SizedBox(height: 16),
+        _buildInfoRow(context, Icons.store, mealEvent.restaurantName, isBold: true),
+        const SizedBox(height: 8),
+        _buildInfoRow(
+            context,
+            Icons.calendar_today,
+            '${DateFormat('EEEE, dd/MM/yyyy', 'vi').format(mealEvent.eventDate.toDate())}'
+        ),
+        const SizedBox(height: 8),
+        _buildInfoRow(context, Icons.access_time, '${mealEvent.startTime} - ${mealEvent.endTime}'),
+        const SizedBox(height: 8),
+        _buildInfoRow(
+          context,
+          Icons.restaurant_menu,
+          'Còn lại: ${mealEvent.remainingMeals} / ${mealEvent.totalMealsOffered} suất',
+          color: Colors.orange,
+        ),
+      ],
+    );
   }
 
   Widget _buildRestaurantDetails(BuildContext context) {
@@ -106,19 +170,74 @@ class MealEventDetailScreen extends StatelessWidget {
       future: restaurantRepo.getRestaurantById(mealEvent.restaurantId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const SizedBox(
+            height: 100,
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          );
         }
         if (!snapshot.hasData || snapshot.data == null) {
-          return const Text('Không tìm thấy thông tin điểm phát.');
+          return const Text('Không tải được thông tin địa điểm.');
         }
+
         final restaurant = snapshot.data!;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildInfoRow(context, Icons.location_city_outlined, restaurant.address),
-            const SizedBox(height: 8),
-            _buildInfoRow(context, Icons.phone_forwarded_outlined, restaurant.phoneNumber),
-          ],
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: Column(
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.location_on, color: Colors.red, size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          restaurant.address,
+                          style: const TextStyle(fontSize: 15, height: 1.4),
+                        ),
+                        Text(
+                          '${restaurant.district}, ${restaurant.province}',
+                          style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const Divider(height: 24),
+              Row(
+                children: [
+                  const Icon(Icons.phone, color: Colors.blue, size: 24),
+                  const SizedBox(width: 12),
+                  Text(
+                    restaurant.phoneNumber,
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                  const Spacer(),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      // Logic gọi điện (nếu cần)
+                      // launchUrl(Uri.parse("tel:${restaurant.phoneNumber}"));
+                    },
+                    icon: const Icon(Icons.call, size: 16),
+                    label: const Text('Gọi'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  )
+                ],
+              ),
+            ],
+          ),
         );
       },
     );
@@ -126,75 +245,108 @@ class MealEventDetailScreen extends StatelessWidget {
 
   Widget _buildBottomButton(BuildContext context) {
     final authUser = context.watch<AuthViewModel>().currentUser;
+    final bool isOutOfStock = mealEvent.remainingMeals <= 0;
 
-    return Consumer<BeneficiaryViewModel>(
-      builder: (context, viewModel, child) {
-        return Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: viewModel.isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : ElevatedButton.icon(
-            icon: const Icon(Icons.check_circle_outline),
-            label: const Text('Đăng ký nhận'),
-            // Điều kiện vô hiệu hóa nút
-            onPressed: (authUser == null || mealEvent.remainingMeals <= 0)
-                ? null
-                : () async {
-              // [SỬA LỖI] Logic được viết lại cho đúng cú pháp
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5)),
+        ],
+      ),
+      child: SafeArea(
+        child: Consumer<BeneficiaryViewModel>(
+          builder: (context, viewModel, child) {
+            return SizedBox(
+              height: 54,
+              child: ElevatedButton(
+                onPressed: (authUser == null || isOutOfStock || viewModel.isLoading)
+                    ? null
+                    : () async {
+                  final error = await viewModel.registerForMeal(mealEvent, authUser);
 
-              // 1. Gọi hàm và chờ kết quả
-              final error = await viewModel.registerForMeal(mealEvent, authUser);
-
-              // 2. Sau khi có kết quả, kiểm tra context và xử lý
-              if (context.mounted) {
-                if (error == null) {
-                  // Thành công
-                  showDialog(
-                    context: context,
-                    barrierDismissible: false, // Không cho đóng dialog bằng cách nhấn ra ngoài
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Đăng ký thành công!'),
-                      content: const Text('Vui lòng đến đúng giờ để nhận suất ăn nhé.'),
-                      actions: [
-                        TextButton(
-                          onPressed: () {
-                            Navigator.of(ctx).pop(); // Đóng dialog
-                            Navigator.of(context).pop(); // Quay về danh sách
-                          },
-                          child: const Text('OK'),
+                  if (context.mounted) {
+                    if (error == null) {
+                      // Thành công
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (ctx) => AlertDialog(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          title: const Column(
+                            children: [
+                              Icon(Icons.check_circle, color: Colors.green, size: 60),
+                              SizedBox(height: 12),
+                              Text('Đăng ký thành công!', textAlign: TextAlign.center),
+                            ],
+                          ),
+                          content: const Text(
+                            'Mã vé đã được lưu vào mục "Vé ăn của tôi".\nVui lòng đến đúng giờ để nhận.',
+                            textAlign: TextAlign.center,
+                          ),
+                          actions: [
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: () {
+                                  Navigator.of(ctx).pop(); // Đóng dialog
+                                  Navigator.of(context).pop(); // Về danh sách
+                                },
+                                child: const Text('Đồng ý'),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  );
-                } else {
-                  // Thất bại
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(error),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              backgroundColor: const Color(0xFFFF6B6B),
-              foregroundColor: Colors.white,
-              textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-          ),
-        );
-      },
+                      );
+                    } else {
+                      // Thất bại (Lỗi đã được làm sạch ở ViewModel)
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(error), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF6B6B),
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.grey.shade300,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: viewModel.isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : Text(
+                  isOutOfStock
+                      ? 'ĐÃ HẾT SUẤT'
+                      : (authUser == null ? 'ĐĂNG NHẬP ĐỂ NHẬN' : 'ĐĂNG KÝ NHẬN NGAY'),
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 
-  Widget _buildInfoRow(BuildContext context, IconData icon, String text) {
+  Widget _buildInfoRow(BuildContext context, IconData icon, String text, {bool isBold = false, Color? color}) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 20, color: Theme.of(context).primaryColor),
+        Icon(icon, size: 20, color: color ?? Colors.grey.shade600),
         const SizedBox(width: 12),
-        Expanded(child: Text(text, style: const TextStyle(fontSize: 16))),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+              color: color ?? Colors.black87,
+              height: 1.3,
+            ),
+          ),
+        ),
       ],
     );
   }
